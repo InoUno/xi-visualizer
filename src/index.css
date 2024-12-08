@@ -7,7 +7,12 @@ input:focus {
 }
 
 @layer base {
+  html {
+    height: 100%;
+  }
+
   body {
+    height: 100%;
     @apply overflow-y-hidden;
     @apply bg-slate-900 text-slate-200 p-5;
   }
@@ -102,7 +107,7 @@ input:focus {
       }
     }
     .solid-select-list {
-        z-index: 1000000;
+      z-index: 1000000;
     }
   }
 }
