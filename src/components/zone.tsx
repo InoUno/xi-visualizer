@@ -35,8 +35,6 @@ export default function ZoneComponent(props: ZoneProps) {
     initialValue: undefined
   });
 
-  console.log("here")
-
   return (
     <section class="p-2">
       <h1 class="text-2xl font-bold">{props.zone.name} ({props.zone.id})</h1>

@@ -135,7 +135,6 @@ function ZoneModel(props: ZoneDataProps) {
 
     // Update camera lookAt target (optional)
     camera.lookAt(center);
-    console.log(center, distance);
   }
 
   // Setup labels
