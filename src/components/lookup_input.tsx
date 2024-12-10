@@ -1,39 +1,58 @@
-import { Select, createOptions } from "@thisbeyond/solid-select";
+import { createOptions, Select } from "@thisbeyond/solid-select";
 import "@thisbeyond/solid-select/style.css";
+import { createMemo } from "solid-js";
 
-interface LookupInputProps {
-  optionMap: any;
-  nameKey?: string;
-  onChange?: (value: any) => any;
-  autofocus?: boolean,
+interface LookupInputProps<T, K extends string | number> {
+  options: T[] | Record<K, T>;
+  nameFn?: (value: T, idx?: K) => string;
+  onChange?: ((value: Option<T>) => any) | ((value: Option<T>[]) => any);
+  autofocus?: boolean;
+  multiple?: boolean;
+  initialId?: string;
+  placeholder?: string;
 }
 
-interface Option {
-    id: string,
-    name: string,
-    data: any,
+interface Option<T> {
+  id: string;
+  name: string;
+  data: T;
 }
 
-export default function LookupInput(props: LookupInputProps) {
-  const options: Option[] = Object.keys(props.optionMap).map((key) => ({
-    id: key,
-    name: props.nameKey
-      ? props.optionMap[key][props.nameKey]
-      : props.optionMap[key],
-    data: props.optionMap[key],
-  }));
-  options.sort((a,b) => a.name.replace("_", "").localeCompare(b.name.replace("_", "")))
+export default function LookupInput<T, K extends string | number>(props: LookupInputProps<T, K>) {
+  const options: () => Option<T>[] = createMemo(() => {
+    let options = Object.keys(props.options).map(idx => ({
+      id: idx,
+      name: props.nameFn
+        ? props.nameFn(props.options[idx], idx as any)
+        : "" + idx,
+      data: props.options[idx],
+    }));
+    options.sort((a, b) => a.name.replace("_", "").localeCompare(b.name.replace("_", "")));
+    return options;
+  });
 
-  const select = createOptions(options, {
+  const select = createOptions(options(), {
     key: "name",
   });
 
+  const initialValue = () => {
+    for (const option of options()) {
+      if (option.id == props.initialId) {
+        return option;
+      }
+    }
+  };
+
   return (
     <Select
-      class="solid-select-xi m-2"
+      class="solid-select-xi"
       {...select}
       autofocus={props.autofocus ?? false}
       onChange={props.onChange}
-    ></Select>
+      multiple={props.multiple ?? false}
+      placeholder={props.placeholder}
+      initialValue={initialValue()}
+    >
+    </Select>
   );
 }

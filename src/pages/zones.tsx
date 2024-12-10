@@ -1,22 +1,23 @@
 import { createSignal, Show } from "solid-js";
-import zones from "../data/zones.json";
 import LookupInput from "../components/lookup_input";
-import ZoneComponent, { Zone } from "../components/zone";
+import ZoneComponent from "../components/zone";
+import zones, { ZoneInfo } from "../data/zones";
 
 export default function ZonesPage() {
-  const [getZone, setZone] = createSignal<Zone>(undefined);
+  const [getZone, setZone] = createSignal<ZoneInfo>(undefined);
 
   return (
     <section class="p-8">
       <h1 class="text-2xl font-bold">Zones</h1>
       <LookupInput
-        optionMap={zones}
-        nameKey="name"
+        options={zones}
+        nameFn={v => v.name}
         autofocus
-        onChange={(value) => {
-          setZone(value.data)
+        onChange={value => {
+          setZone(value.data);
         }}
-      ></LookupInput>
+      >
+      </LookupInput>
 
       <Show when={getZone()}>
         <ZoneComponent zone={getZone()}></ZoneComponent>

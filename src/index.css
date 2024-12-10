@@ -6,6 +6,10 @@ input:focus {
   outline: none;
 }
 
+* {
+  color-scheme: dark;
+}
+
 @layer base {
   html {
     height: 100%;
@@ -13,7 +17,6 @@ input:focus {
 
   body {
     height: 100%;
-    @apply overflow-y-hidden;
     @apply bg-slate-900 text-slate-200 p-5;
   }
 
@@ -22,7 +25,7 @@ input:focus {
   }
 
   button {
-    @apply my-2 py-1.5 px-3 rounded-lg font-medium 
+    @apply my-1 py-1.5 px-3 rounded-lg font-medium 
         text-center
         shadow-lg
         border-2 hover:border-blue-100 border-slate-400 
@@ -34,7 +37,7 @@ input:focus {
         disabled:hover:border-slate-600;
   }
 
-  input {
+  input.text-input, input[type="time"], input[type="datetime-local"] {
     @apply block m-1 py-1 px-2 rounded-md
         bg-slate-700 border border-slate-400 
         placeholder:text-slate-400
@@ -43,7 +46,7 @@ input:focus {
   }
 
   table {
-    @apply text-left w-full my-4;
+    @apply text-left w-full;
   }
 
   thead {
@@ -81,33 +84,42 @@ input:focus {
 
   .solid-select-xi {
     font-size: 1em;
+
     &.solid-select-container {
       @apply bg-slate-800;
       @apply text-slate-300;
     }
     .solid-select-control {
-      @apply bg-slate-800;
-      @apply border-b border-slate-600;
+      @apply rounded-md
+        bg-slate-700 border border-slate-400 
+        focus:border-slate-200 ;
       &:focus-within {
-        @apply border-b border-slate-600;
-        outline: none;
+        @apply border-b border-slate-400 outline-none;
       }
     }
     .solid-select-placeholder {
-      @apply text-slate-400;
+      @apply my-1 py-1 text-slate-400;
     }
     .solid-select-option {
       &:hover {
-        @apply bg-slate-600;
-        @apply text-slate-300;
+        @apply bg-slate-600 text-slate-300 rounded-sm cursor-pointer;
       }
       &[data-focused="true"] {
-        @apply bg-slate-700;
-        @apply text-slate-300;
+        @apply bg-slate-700 text-slate-300 rounded-sm;
       }
     }
     .solid-select-list {
       z-index: 1000000;
+      @apply border rounded-sm border-slate-500;
+    }
+    .solid-select-single-value {
+      @apply m-1 p-1;
+    }
+    .solid-select-multi-value {
+      @apply m-1 p-1 bg-slate-700;
+    }
+    .solid-select-input {
+      @apply my-1 py-1;
     }
   }
 }

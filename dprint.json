@@ -1,0 +1,24 @@
+{
+  "indentWidth": 2,
+  "lineWidth": 160,
+  "newLineKind": "lf",
+  "typescript": {
+    "semiColons": "always",
+    "quoteStyle": "preferDouble",
+    "quoteProps": "consistent",
+    "trailingCommas": "onlyMultiLine",
+    "functionExpression.spaceAfterFunctionKeyword": true,
+    "arrowFunction.useParentheses": "preferNone",
+    "module.sortImportDeclarations": "caseInsensitive"
+  },
+  "json": {
+  },
+  "excludes": [
+    "**/node_modules",
+    "**/*-lock.json"
+  ],
+  "plugins": [
+    "https://plugins.dprint.dev/typescript-0.93.3.wasm",
+    "https://plugins.dprint.dev/json-0.19.4.wasm"
+  ]
+}

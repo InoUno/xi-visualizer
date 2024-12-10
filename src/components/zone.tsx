@@ -1,38 +1,21 @@
-import { createEffect, createResource, createSignal, Match, onMount, Show, Switch } from 'solid-js';
-import ZoneModel from './zone_model';
-
-async function compress(inString) { 
-  const compressedStream = new Response(inString)
-    .body.pipeThrough(new CompressionStream('deflate'));
-  return await new Response(compressedStream).arrayBuffer(); 
-}
-
-async function decompress(bytes) {
-  const decompressedStream = new Response(bytes)
-    .body.pipeThrough(new DecompressionStream('deflate'));
-  return await new Response(decompressedStream).arrayBuffer();
-}
+import { createEffect, createResource, createSignal, Match, onMount, Show, Switch } from "solid-js";
+import { ZoneInfo } from "../data/zones";
+import { decompress } from "../util";
+import ZoneModel from "./zone_model";
 
 export interface ZoneProps {
-  zone: Zone,
-}
-
-export interface Zone {
-  id: number;
-  name: string;
+  zone: ZoneInfo;
 }
 
 export default function ZoneComponent(props: ZoneProps) {
-  const [model] = createResource(() => props.zone.id, async (zoneId) => {
+  const [model] = createResource(() => props.zone.id, async zoneId => {
     console.time("load-mesh");
-    const url = `${import.meta.env.BASE_URL}zone_meshes/${zoneId}.ximesh`
+    const url = `${import.meta.env.BASE_URL}zone_meshes/${zoneId}.ximesh`;
     const response = await fetch(url);
     const compressed = await response.arrayBuffer();
     const bytes = await decompress(compressed);
     console.timeEnd("load-mesh");
     return bytes;
-  }, {
-    initialValue: undefined
   });
 
   return (
@@ -46,7 +29,16 @@ export default function ZoneComponent(props: ZoneProps) {
           Failed to load zone model.
         </Match>
         <Match when={!model.loading && !model.error}>
-        <ZoneModel buffer={model()}></ZoneModel>
+          <ZoneModel
+            zoneData={{
+              [props.zone.id]: {
+                id: props.zone.id,
+                name: props.zone.name,
+                mesh: model(),
+              },
+            }}
+          >
+          </ZoneModel>
         </Match>
       </Switch>
     </section>

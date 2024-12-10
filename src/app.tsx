@@ -1,16 +1,26 @@
-import { Suspense, type Component } from 'solid-js';
-import { A, useLocation } from '@solidjs/router';
+import { A, useLocation } from "@solidjs/router";
+import { type Component, Suspense } from "solid-js";
 
-const App: Component = (props: { children: Element }) => {
+const App: Component = (props: { children: Element; }) => {
   const location = useLocation();
 
   return (
-    <div class='content'>
+    <div class="content">
       <nav class="bg-slate-800 rounded-lg">
         <ul class="flex items-center">
           <li class="py-2 px-4">
             <A href="/" class="no-underline hover:underline">
-              Zones
+              Home
+            </A>
+          </li>
+          <li class="py-2 px-4">
+            <A href="/packet" class="no-underline hover:underline">
+              Packet
+            </A>
+          </li>
+          <li class="py-2 px-4">
+            <A href="/zone" class="no-underline hover:underline">
+              Zone
             </A>
           </li>
         </ul>
