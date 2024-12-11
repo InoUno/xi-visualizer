@@ -1,11 +1,13 @@
 import CameraControls from "camera-controls";
-import * as holdEvent from "hold-event";
 import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from "solid-js";
-import { createStore, produce } from "solid-js/store";
+import { createStore } from "solid-js/store";
 import * as THREE from "three";
 import Stats from "three/addons/libs/stats.module.js";
 import { FlyControls, MapControls } from "three/examples/jsm/Addons.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { addCustomCameraControls, addMapControls, fitCameraToContents } from "../graphics/camera";
+import { setupBaseScene } from "../graphics/scene";
+import { cleanupNode } from "../graphics/util";
 import { EntityUpdate, EntityUpdateKind, ZoneEntityUpdates } from "../parse_packets";
 import { ByZone } from "../types";
 import LookupInput from "./lookup_input";
@@ -98,36 +100,7 @@ export default function ZoneModel(props: ZoneDataProps) {
     return result;
   });
 
-  const clock = new THREE.Clock();
-
-  const stats = new Stats();
-  const renderer = new THREE.WebGLRenderer();
-  // renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.domElement.className = "w-full h-full";
-  renderer.setAnimationLoop(animate);
-
-  const raycaster = new THREE.Raycaster();
-  const mouse = new THREE.Vector2(1, 1);
-
-  // Background
-  const scene = new THREE.Scene();
-  scene.scale.set(1, 1, -1); // FFXI mesh is flipped on the z-axis
-  scene.background = new THREE.Color(0x3333333);
-
-  // Gridlines
-  const grid = new THREE.GridHelper(2000, 200, 0xAAAAAA, 0xAAAAAA);
-  grid.material.opacity = 0.2;
-  grid.material.transparent = true;
-  scene.add(grid);
-
-  // LIGHTS
-  const hemiLight = new THREE.HemisphereLight(0xE5F5FF, 0xB97A20, 1.5);
-  hemiLight.position.set(300, 1000, 300);
-  scene.add(hemiLight);
-
-  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 5000);
-  camera.position.set(0, 1000, 0);
-  camera.lookAt(0, 0, 0);
+  const [scene, camera] = setupBaseScene();
 
   // Create zones
   createEffect(() => {
@@ -294,6 +267,11 @@ export default function ZoneModel(props: ZoneDataProps) {
       for (const entityKey in props.entityUpdates[zoneId]) {
         setEntitySettings(entityKey, { hidden: !zoneIsVisible });
       }
+      // if (zoneIsVisible) {
+      //   fitCameraToContents(camera, fn => {
+      //     Object.keys(currentZoneEntities[zoneId]).forEach(entityKey => fn(currentZoneEntities[zoneId][entityKey]));
+      //   });
+      // }
     }
   });
 
@@ -304,32 +282,6 @@ export default function ZoneModel(props: ZoneDataProps) {
       currentZoneEntities[zoneId][entityKey].visible = !entitySettings[entityKey].hidden;
     }
   });
-
-  function fitCameraToContents() {
-    const box = new THREE.Box3();
-
-    // Loop through all children in the scene
-    scene.traverse(object => {
-      if (object) {
-        box.expandByObject(object); // Include mesh bounding boxes
-      }
-    });
-
-    const size = new THREE.Vector3();
-    const center = new THREE.Vector3();
-    box.getSize(size);
-    box.getCenter(center);
-
-    // Set camera position to center of bounding box
-    camera.position.copy(center);
-
-    // Adjust distance based on size and desired field of view (FOV)
-    const distance = size.length() / (2 * Math.tan((Math.PI * camera.fov) / 360));
-    camera.position.y = distance;
-
-    // Update camera lookAt target (optional)
-    camera.lookAt(center);
-  }
 
   // Setup labels
   const labelRenderer = new CSS2DRenderer();
@@ -348,8 +300,13 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   let controls: CameraControls | FlyControls | MapControls = undefined!;
 
+  const renderer = new THREE.WebGLRenderer();
+  // renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.domElement.className = "w-full h-full";
+  renderer.setAnimationLoop(animate);
+
   onMount(() => {
-    addMapControls();
+    controls = addMapControls(camera, renderer.domElement);
   });
 
   onCleanup(() => {
@@ -362,21 +319,6 @@ export default function ZoneModel(props: ZoneDataProps) {
     scene.clear();
     renderer.forceContextLoss();
   });
-
-  function cleanupNode(node: THREE.Object3D) {
-    if (node instanceof THREE.Mesh) {
-      node.geometry.dispose();
-
-      let materials = node.material instanceof Array ? node.material : [node.material];
-      for (const material of materials) {
-        material.dispose();
-      }
-    }
-    for (const child of node.children) {
-      cleanupNode(child);
-    }
-    node.clear();
-  }
 
   function cleanUpZones(forced = false) {
     // Remove old zones that aren't needed anymore
@@ -405,89 +347,10 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
   }
 
-  function addMapControls() {
-    const mapControls = new MapControls(camera, renderer.domElement);
-    controls = mapControls;
-  }
-
-  function addCustomCameraControls() {
-    CameraControls.install({ THREE: THREE });
-    controls = new CameraControls(camera, renderer.domElement);
-    // Flips left and right mouse buttons
-    controls.draggingSmoothTime = 0;
-    controls.mouseButtons = {
-      left: CameraControls.ACTION.TRUCK,
-      right: CameraControls.ACTION.ROTATE,
-      middle: CameraControls.ACTION.DOLLY,
-      wheel: CameraControls.ACTION.DOLLY,
-    };
-
-    const baseSpeed = 0.05;
-    const shiftSpeed = baseSpeed * 3;
-    let currentSpeed = baseSpeed;
-
-    window.addEventListener("keydown", ev => {
-      if (ev.code == "ShiftLeft" || ev.code == "ShiftRight") {
-        currentSpeed = shiftSpeed;
-      }
-    });
-    window.addEventListener("keyup", ev => {
-      if (ev.code == "ShiftLeft" || ev.code == "ShiftRight") {
-        currentSpeed = baseSpeed;
-      }
-    });
-
-    const wKey = new holdEvent.KeyboardKeyHold("KeyW", 16.666);
-    const aKey = new holdEvent.KeyboardKeyHold("KeyA", 16.666);
-    const sKey = new holdEvent.KeyboardKeyHold("KeyS", 16.666);
-    const dKey = new holdEvent.KeyboardKeyHold("KeyD", 16.666);
-    aKey.addEventListener("holding", function (event) {
-      controls.truck(-1 * currentSpeed * event!.deltaTime, 0, false);
-    });
-    dKey.addEventListener("holding", function (event) {
-      controls.truck(currentSpeed * event!.deltaTime, 0, false);
-    });
-    wKey.addEventListener("holding", function (event) {
-      controls.forward(currentSpeed * event!.deltaTime, false);
-    });
-    sKey.addEventListener("holding", function (event) {
-      controls.forward(-1 * currentSpeed * event!.deltaTime, false);
-    });
-
-    const leftKey = new holdEvent.KeyboardKeyHold("ArrowLeft", 100);
-    const rightKey = new holdEvent.KeyboardKeyHold("ArrowRight", 100);
-    const upKey = new holdEvent.KeyboardKeyHold("ArrowUp", 100);
-    const downKey = new holdEvent.KeyboardKeyHold("ArrowDown", 100);
-    leftKey.addEventListener("holding", function (event) {
-      controls.rotate(
-        -0.1 * THREE.MathUtils.DEG2RAD * event!.deltaTime,
-        0,
-        true,
-      );
-    });
-    rightKey.addEventListener("holding", function (event) {
-      controls.rotate(
-        0.1 * THREE.MathUtils.DEG2RAD * event!.deltaTime,
-        0,
-        true,
-      );
-    });
-    upKey.addEventListener("holding", function (event) {
-      controls.rotate(
-        0,
-        -0.05 * THREE.MathUtils.DEG2RAD * event!.deltaTime,
-        true,
-      );
-    });
-    downKey.addEventListener("holding", function (event) {
-      controls.rotate(
-        0,
-        0.05 * THREE.MathUtils.DEG2RAD * event!.deltaTime,
-        true,
-      );
-    });
-  }
-
+  const clock = new THREE.Clock();
+  const stats = new Stats();
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2(1, 1);
   function animate() {
     stats.update();
 
