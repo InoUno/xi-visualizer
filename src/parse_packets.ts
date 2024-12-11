@@ -148,12 +148,12 @@ export class PacketParser {
     const entityKey = `0x${entityIndex.toString(16).toUpperCase().padStart(3, "0")}-${entityId}`;
 
     const timestamp = this.parseTimestamp(lines[0]);
-    const xOffset = this.extractU16(lines, 0x08);
-    const zOffset = this.extractU16(lines, 0x0A);
+    const xOffset = this.extractI16(lines, 0x08);
+    const zOffset = this.extractI16(lines, 0x0A);
 
     const pos: Position = {
       x: this.lastClientPosition.x + xOffset,
-      y: this.lastClientPosition.y + 2,
+      y: this.lastClientPosition.y - 10,
       z: this.lastClientPosition.z + zOffset,
     };
 
@@ -204,6 +204,12 @@ export class PacketParser {
     const bytes = this.extractBytes(lines, offset, 4);
     const dv = new DataView(bytes);
     return dv.getUint16(0, true);
+  }
+
+  private extractI16(lines: string[], offset: number): number {
+    const bytes = this.extractBytes(lines, offset, 4);
+    const dv = new DataView(bytes);
+    return dv.getInt16(0, true);
   }
 
   private extractFloat(lines: string[], offset: number): number {
