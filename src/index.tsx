@@ -3,7 +3,7 @@ import "./index.css";
 
 import { render, Suspense } from "solid-js/web";
 
-import { Router } from "@solidjs/router";
+import { HashRouter } from "@solidjs/router";
 import App from "./app";
 import { routes } from "./routes";
 
@@ -16,6 +16,6 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 }
 
 render(
-  () => <Router base={import.meta.env.BASE_URL} root={props => <App>{props.children}</App>}>{routes}</Router>,
+  () => <HashRouter root={props => <App>{props.children}</App>}>{routes}</HashRouter>,
   root,
 );
