@@ -17,7 +17,7 @@ input:focus {
 
   body {
     height: 100%;
-    @apply bg-slate-900 text-slate-200 p-5;
+    @apply bg-slate-900 text-slate-200 p-2;
   }
 
   .clickable {
@@ -50,7 +50,10 @@ input:focus {
   }
 
   thead {
-    @apply bg-slate-700 border-b;
+    @apply bg-slate-700;
+    box-shadow: inset 0 -1px 0 theme(colors.slate.400);
+    -moz-box-shadow: inset 0 -1px 0 theme(colors.slate.400);
+    -webkit-box-shadow: inset 0 -1px 0 theme(colors.slate.400);
   }
 
   tbody {

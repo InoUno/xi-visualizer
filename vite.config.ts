@@ -9,5 +9,5 @@ export default defineConfig({
   build: {
     target: "esnext",
   },
-  base: "/xi-visualizer/",
+  base: "/xi-visualizer",
 });

@@ -10,7 +10,7 @@ export interface ZoneProps {
 export default function ZoneComponent(props: ZoneProps) {
   const [model] = createResource(() => props.zone.id, async zoneId => {
     console.time("load-mesh");
-    const url = `${import.meta.env.BASE_URL}zone_meshes/${zoneId}.ximesh`;
+    const url = `${import.meta.env.BASE_URL}/zone_meshes/${zoneId}.ximesh`;
     const response = await fetch(url);
     const compressed = await response.arrayBuffer();
     const bytes = await decompress(compressed);

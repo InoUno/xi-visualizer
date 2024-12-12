@@ -48,7 +48,7 @@ export default function PacketPage({}: PacketPageProps) {
       promises.push(
         new Promise(async resolve => {
           console.time(`load-mesh-${zoneId}`);
-          const url = `${import.meta.env.BASE_URL}zone_meshes/${zoneId}.ximesh`;
+          const url = `${import.meta.env.BASE_URL}/zone_meshes/${zoneId}.ximesh`;
           const response = await fetch(url);
           const compressed = await response.arrayBuffer();
           const bytes = await decompress(compressed);
@@ -68,7 +68,7 @@ export default function PacketPage({}: PacketPageProps) {
   });
 
   return (
-    <section class="p-8">
+    <section class="px-8 py-4">
       <h1 class="text-2xl font-bold">Packet</h1>
 
       <Switch

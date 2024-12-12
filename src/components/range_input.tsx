@@ -4,12 +4,15 @@ import "./range_input.css";
 interface RangeInputProps {
   min: number;
   max: number;
-  startMinPct?: number;
-  startMaxPct?: number;
+  lower?: number;
+  upper?: number;
   step?: number;
   minDiff?: number;
-  onChange?: (min: number, max: number) => any;
+  onChange?: (lower: number, upper: number) => any;
+  onChangeLower?: (lower: number) => any;
+  onChangeUpper?: (upper: number) => any;
   inputKind?: "number" | "timestamp";
+  disabled?: boolean;
 }
 
 interface DragStartInfo {
@@ -22,28 +25,19 @@ export default function RangeInput(props: RangeInputProps) {
   // Default minimum step/diff of 1000ms = 1s,
   // else just 1 step size.
   const defaultStep = () => props.inputKind == "timestamp" ? 1000 : 1;
+  const diff = () => props.max - props.min;
+
   const ps = mergeProps({
     step: defaultStep(),
     minDiff: defaultStep(),
+    lower: Math.round(props.min + diff() / 100 * 25),
+    upper: Math.round(props.min + diff() / 100 * 75),
+    onChange: () => {},
+    onChangeLower: () => {},
+    onChangeUpper: () => {},
   }, props);
 
-  const diff = () => ps.max - ps.min;
-  const [getCurrentMin, setCurrentMin] = createSignal<number>();
-  const [getCurrentMax, setCurrentMax] = createSignal<number>();
   const [getStartDrag, setStartDrag] = createSignal<DragStartInfo | undefined>(undefined);
-
-  createEffect(() => {
-    setCurrentMin(ps.startMinPct ? (diff() * ps.startMinPct) / 100 + ps.min : ps.min);
-  });
-  createEffect(() => {
-    setCurrentMax(ps.startMaxPct ? (diff() * ps.startMaxPct) / 100 + ps.min : ps.max);
-  });
-
-  createEffect(() => {
-    if (ps.onChange) {
-      ps.onChange(getCurrentMin(), getCurrentMax());
-    }
-  });
 
   // Setup handling of different kinds of inputs (number/time/datetime)
   let inputType = createMemo(() => {
@@ -86,39 +80,41 @@ export default function RangeInput(props: RangeInputProps) {
 
   // Calculate derived percentages of how much space the bar takes up.
   const leftPct = createMemo(() => {
-    return `${clamp((getCurrentMin() - ps.min) / diff() * 100, 0, 100)}%`;
+    return `${clamp((ps.lower - ps.min) / diff() * 100, 0, 100)}%`;
   });
   const rightPct = createMemo(() => {
-    return `${clamp((ps.max - getCurrentMax()) / diff() * 100, 0, 100)}%`;
+    return `${clamp((ps.max - ps.upper) / diff() * 100, 0, 100)}%`;
   });
 
-  // Using references to elements to force gap between min and max
-  let minInput: HTMLInputElement, maxInput: HTMLInputElement;
+  // Using references to elements to force gap between lower and upper
+  let lowerInput: HTMLInputElement, upperInput: HTMLInputElement;
 
-  // Ensure the new maximum is within the allowed range
-  const updateMax = (newMax: number, doRound: boolean = false) => {
-    if (newMax < getCurrentMin() + ps.minDiff) {
-      newMax = getCurrentMin() + ps.minDiff;
-    } else if (newMax >= ps.max) {
-      newMax = ps.max;
+  // Ensure the new lower is within the allowed range
+  const updateLower = (newLower: number, doRound: boolean = false) => {
+    if (newLower > ps.upper - ps.minDiff) {
+      newLower = ps.upper - ps.minDiff;
+    } else if (newLower <= ps.min) {
+      newLower = ps.min;
       doRound = false;
     }
-    newMax = doRound ? valueTransforms().numRounding(newMax) : newMax;
-    setCurrentMax(newMax);
-    maxInput.value = newMax as any;
+    newLower = doRound ? valueTransforms().numRounding(newLower) : newLower;
+    lowerInput.value = newLower as any;
+    ps.onChangeLower(newLower);
+    ps.onChange(newLower, ps.upper);
   };
 
-  // Ensure the new minimum is within the allowed range
-  const updateMin = (newMin: number, doRound: boolean = false) => {
-    if (newMin > getCurrentMax() - ps.minDiff) {
-      newMin = getCurrentMax() - ps.minDiff;
-    } else if (newMin <= ps.min) {
-      newMin = ps.min;
+  // Ensure the new upper is within the allowed range
+  const updateUpper = (newUpper: number, doRound: boolean = false) => {
+    if (newUpper < ps.lower + ps.minDiff) {
+      newUpper = ps.lower + ps.minDiff;
+    } else if (newUpper >= ps.max) {
+      newUpper = ps.max;
       doRound = false;
     }
-    newMin = doRound ? valueTransforms().numRounding(newMin) : newMin;
-    setCurrentMin(newMin);
-    minInput.value = newMin as any;
+    newUpper = doRound ? valueTransforms().numRounding(newUpper) : newUpper;
+    upperInput.value = newUpper as any;
+    ps.onChangeUpper(newUpper);
+    ps.onChange(ps.lower, newUpper);
   };
 
   let invisibleElement; // Used to hide drag ghost image
@@ -126,8 +122,8 @@ export default function RangeInput(props: RangeInputProps) {
     e.dataTransfer.setDragImage(invisibleElement, 0, 0); // Hide drag ghost image
     setStartDrag({
       x: e.clientX,
-      startMin: getCurrentMin(),
-      startMax: getCurrentMax(),
+      startMin: ps.lower,
+      startMax: ps.upper,
     });
   };
 
@@ -139,15 +135,15 @@ export default function RangeInput(props: RangeInputProps) {
 
     const dragInfo = getStartDrag();
     const movedDist = e.clientX - dragInfo.x;
-    const barLength = minInput.getBoundingClientRect().width;
+    const barLength = lowerInput.getBoundingClientRect().width;
     const valuePerPixel = diff() / barLength;
     const valueChange = valueTransforms().numRounding(movedDist * valuePerPixel);
     if (valueChange > 0) {
-      updateMax(dragInfo.startMax + valueChange);
-      updateMin(dragInfo.startMin + valueChange);
+      updateUpper(dragInfo.startMax + valueChange);
+      updateLower(dragInfo.startMin + valueChange);
     } else {
-      updateMin(dragInfo.startMin + valueChange);
-      updateMax(dragInfo.startMax + valueChange);
+      updateLower(dragInfo.startMin + valueChange);
+      updateUpper(dragInfo.startMax + valueChange);
     }
   };
 
@@ -158,19 +154,21 @@ export default function RangeInput(props: RangeInputProps) {
         step={1}
         min={valueTransforms().fromNum(ps.min)}
         max={valueTransforms().fromNum(ps.max)}
-        value={valueTransforms().fromNum(getCurrentMin())}
-        onChange={e => updateMin(valueTransforms().toNum(e.target.value))}
+        value={valueTransforms().fromNum(ps.lower)}
+        onChange={e => updateLower(valueTransforms().toNum(e.target.value))}
+        disabled={ps.disabled}
       />
 
       <div class="slider flex-grow m-auto mr-2">
         {
-          // Used to hide drag ghost image
+          // Used to hide drag ghost image of the bar
           <div ref={invisibleElement} class="hidden"></div>
         }
         <div
-          class="range-span cursor-move"
+          class="range-span"
+          classList={{ "cursor-move": !ps.disabled, "disabled": ps.disabled }}
           style={{ left: leftPct(), right: rightPct() }}
-          draggable={true}
+          draggable={!ps.disabled}
           onDragStart={onDragStart}
           onDrag={onDrag}
         >
@@ -178,25 +176,27 @@ export default function RangeInput(props: RangeInputProps) {
 
         <input
           type="range"
-          ref={minInput}
+          ref={lowerInput}
           min={ps.min}
           max={ps.max}
           step={ps.step}
-          value={getCurrentMin()}
+          value={ps.lower}
           onInput={e => {
-            updateMin(parseInt(e.target.value), true);
+            updateLower(parseInt(e.target.value), true);
           }}
+          disabled={ps.disabled}
         />
         <input
           type="range"
-          ref={maxInput}
+          ref={upperInput}
           min={ps.min}
           max={ps.max}
           step={ps.step}
-          value={getCurrentMax()}
+          value={ps.upper}
           onInput={e => {
-            updateMax(parseInt(e.target.value), true);
+            updateUpper(parseInt(e.target.value), true);
           }}
+          disabled={ps.disabled}
         />
       </div>
 
@@ -205,8 +205,9 @@ export default function RangeInput(props: RangeInputProps) {
         step={1}
         min={valueTransforms().fromNum(ps.min)}
         max={valueTransforms().fromNum(ps.max)}
-        value={valueTransforms().fromNum(getCurrentMax())}
-        onChange={e => updateMax(valueTransforms().toNum(e.target.value))}
+        value={valueTransforms().fromNum(ps.upper)}
+        onChange={e => updateUpper(valueTransforms().toNum(e.target.value))}
+        disabled={ps.disabled}
       />
     </div>
   );

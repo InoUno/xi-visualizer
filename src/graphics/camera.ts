@@ -3,6 +3,11 @@ import * as holdEvent from "hold-event";
 import * as THREE from "three";
 import { MapControls } from "three/examples/jsm/controls/MapControls";
 
+export function adjustCameraAspect(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement) {
+  camera.aspect = canvas.clientWidth / canvas.clientHeight;
+  camera.updateProjectionMatrix();
+}
+
 export function fitCameraToContents(camera: THREE.PerspectiveCamera, objectIter: (fn: (obj: THREE.Object3D) => any) => any) {
   const box = new THREE.Box3();
   let matrix = new THREE.Matrix4();

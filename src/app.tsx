@@ -7,7 +7,7 @@ const App: Component = (props: { children: Element; }) => {
   return (
     <div class="content">
       <nav class="bg-slate-800 rounded-lg">
-        <ul class="flex items-center">
+        <ul class="flex space-x-4 font-bold items-center">
           <li class="py-2 px-4">
             <A href="/" class="no-underline hover:underline">
               Home

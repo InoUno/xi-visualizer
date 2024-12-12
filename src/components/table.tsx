@@ -38,7 +38,7 @@ export default function Table<
   const fuseIndex = createMemo(() => {
     return new fusejs(ps.inputRows, {
       keys: ps.columns.map(col => col.key),
-      threshold: 0.3,
+      threshold: 0.0,
     });
   });
 
@@ -85,43 +85,45 @@ export default function Table<
         {ps.headerElements.map(element => element instanceof Function ? element(rows()) : element)}
       </div>
 
-      <table class="table-auto mt-1">
-        <thead>
-          <tr>
-            {ps.columns.map(col => (
-              <th
-                class="hover:cursor-pointer"
-                onclick={() => updateSort(col.key)}
-              >
-                {col.name}
-              </th>
-            ))}
-
-            {ps.additionalColumns
-              ? ps.additionalColumns.map(col => <th>{col.name}</th>)
-              : undefined}
-          </tr>
-        </thead>
-
-        <tbody>
-          <For each={rows()}>
-            {row => {
-              return (
-                <tr
-                  class="hover:bg-slate-700"
-                  onClick={ps.onRowClick ? e => ps.onRowClick(row) : undefined}
+      <div class="m-1 overflow-y-auto" style={{ "max-height": "20rem" }}>
+        <table class="w-full">
+          <thead class="sticky top-0">
+            <tr>
+              {ps.columns.map(col => (
+                <th
+                  class="hover:cursor-pointer"
+                  onclick={() => updateSort(col.key)}
                 >
-                  {ps.columns.map(col => <td>{row[col.key]}</td>)}
+                  {col.name}
+                </th>
+              ))}
 
-                  {ps.additionalColumns
-                    ? ps.additionalColumns.map(col => <td>{col.content(row)}</td>)
-                    : undefined}
-                </tr>
-              );
-            }}
-          </For>
-        </tbody>
-      </table>
+              {ps.additionalColumns
+                ? ps.additionalColumns.map(col => <th>{col.name}</th>)
+                : undefined}
+            </tr>
+          </thead>
+
+          <tbody class="overflow-y-auto">
+            <For each={rows()}>
+              {row => {
+                return (
+                  <tr
+                    class="hover:bg-slate-700"
+                    onClick={ps.onRowClick ? e => ps.onRowClick(row) : undefined}
+                  >
+                    {ps.columns.map(col => <td>{row[col.key]}</td>)}
+
+                    {ps.additionalColumns
+                      ? ps.additionalColumns.map(col => <td>{col.content(row)}</td>)
+                      : undefined}
+                  </tr>
+                );
+              }}
+            </For>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

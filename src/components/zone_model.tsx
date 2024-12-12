@@ -5,7 +5,7 @@ import * as THREE from "three";
 import Stats from "three/addons/libs/stats.module.js";
 import { FlyControls, MapControls } from "three/examples/jsm/Addons.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { addCustomCameraControls, addMapControls, fitCameraToContents } from "../graphics/camera";
+import { addCustomCameraControls, addMapControls, adjustCameraAspect, fitCameraToContents } from "../graphics/camera";
 import { setupBaseScene } from "../graphics/scene";
 import { cleanupNode } from "../graphics/util";
 import { EntityUpdate, EntityUpdateKind, ZoneEntityUpdates } from "../parse_packets";
@@ -46,8 +46,8 @@ interface EntityRow {
 }
 interface ParsedEntityUpdates {
   entityRows: EntityRow[];
-  minTime: number;
-  maxTime: number;
+  firstTime: number;
+  lastTime: number;
 }
 
 export default function ZoneModel(props: ZoneDataProps) {
@@ -57,6 +57,10 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   const [entitySettings, setEntitySettings] = createStore<EntitiesSettings>();
   const [zoneMeshes, setZoneMeshes] = createStore<ByZone<THREE.Mesh>>();
+
+  const [getShowDiscrete, setShowDiscrete] = createSignal<boolean>(true);
+  const [getStartTime, setStartTime] = createSignal<number>(0);
+  const [getEndTime, setEndTime] = createSignal<number>(1);
 
   const parsedEntityUpdates = createMemo(() => {
     if (!props.entityUpdates) {
@@ -68,16 +72,16 @@ export default function ZoneModel(props: ZoneDataProps) {
     } = {};
 
     Object.keys(props.entityUpdates).forEach(zoneId => {
-      let minTime = Number.MAX_SAFE_INTEGER;
-      let maxTime = Number.MIN_SAFE_INTEGER;
+      let firstTime = Number.MAX_SAFE_INTEGER;
+      let lastTime = Number.MIN_SAFE_INTEGER;
 
       let rows = Object.keys(props.entityUpdates[zoneId]).map(
         entityKey => {
           const updates: EntityUpdate[] = props.entityUpdates[zoneId][entityKey];
           const updateCount = updates.length;
 
-          minTime = Math.min(minTime, updates[0].time);
-          maxTime = Math.max(maxTime, updates[updates.length - 1].time);
+          firstTime = Math.min(firstTime, updates[0].time);
+          lastTime = Math.max(lastTime, updates[updates.length - 1].time);
 
           setEntitySettings(entityKey, { hidden: true });
           const split = entityKey.split("-");
@@ -92,8 +96,8 @@ export default function ZoneModel(props: ZoneDataProps) {
 
       result[zoneId] = {
         entityRows: rows,
-        minTime,
-        maxTime,
+        firstTime,
+        lastTime,
       };
     });
 
@@ -108,7 +112,7 @@ export default function ZoneModel(props: ZoneDataProps) {
 
     for (const zoneId in props.zoneData) {
       if (zoneMeshes[zoneId]) {
-        // Mesh already setup
+        // Mesh is already set up
         continue;
       }
 
@@ -205,8 +209,8 @@ export default function ZoneModel(props: ZoneDataProps) {
   });
 
   // Show entities at different points in time
-  const onTimeRangeChange = (minTime: number, maxTime: number) => {
-    if (!props.entityUpdates) {
+  createEffect(() => {
+    if (!props.entityUpdates || !getShowDiscrete()) {
       return;
     }
 
@@ -223,13 +227,13 @@ export default function ZoneModel(props: ZoneDataProps) {
 
       // Skip until first visible update
       let idx = 0;
-      while (idx < updates.length && updates[idx].time < minTime) {
+      while (idx < updates.length && updates[idx].time < getStartTime()) {
         idx++;
       }
 
       let showCount = 0;
       // Add until last visible update
-      while (idx < updates.length && updates[idx].time <= maxTime) {
+      while (idx < updates.length && updates[idx].time <= getEndTime()) {
         const update = updates[idx];
         if (update.kind !== EntityUpdateKind.Position && update.kind !== EntityUpdateKind.Widescan) {
           // Only add positional updates
@@ -253,8 +257,9 @@ export default function ZoneModel(props: ZoneDataProps) {
         mesh.instanceColor.needsUpdate = true;
       }
     }
-  };
+  });
 
+  // Show/hide zone meshes and associated entities
   createEffect(() => {
     for (const zoneId in zoneMeshes) {
       const zoneIsVisible = parseInt(zoneId) == getSelectedZone();
@@ -275,11 +280,12 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
   });
 
+  // Show/hide discrete entity meshes
   createEffect(() => {
     for (const entityKey in entitySettings) {
       const entityId = parseInt(entityKey.split("-")[1]);
       const zoneId = (entityId >> 12) & 0x01ff;
-      currentZoneEntities[zoneId][entityKey].visible = !entitySettings[entityKey].hidden;
+      currentZoneEntities[zoneId][entityKey].visible = getShowDiscrete() && !entitySettings[entityKey].hidden;
     }
   });
 
@@ -299,14 +305,24 @@ export default function ZoneModel(props: ZoneDataProps) {
   scene.add(label);
 
   let controls: CameraControls | FlyControls | MapControls = undefined!;
-
-  const renderer = new THREE.WebGLRenderer();
-  // renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.domElement.className = "w-full h-full";
-  renderer.setAnimationLoop(animate);
+  let canvasElement: HTMLCanvasElement;
 
   onMount(() => {
-    controls = addMapControls(camera, renderer.domElement);
+    const parentRect = canvasElement.parentElement?.getBoundingClientRect();
+    canvasElement.width = parentRect.width;
+    canvasElement.height = parentRect.height;
+    adjustCameraAspect(camera, canvasElement);
+
+    const renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true, alpha: true });
+    renderer.setAnimationLoop(() => animate(renderer));
+
+    canvasElement.addEventListener("mousemove", event => {
+      const canvas = canvasElement;
+      mouse.x = (2 * event.offsetX) / canvas.offsetWidth - 1;
+      mouse.y = (-2 * event.offsetY) / canvas.offsetHeight + 1;
+    });
+
+    controls = addMapControls(camera, canvasElement);
   });
 
   onCleanup(() => {
@@ -317,7 +333,6 @@ export default function ZoneModel(props: ZoneDataProps) {
       controls.dispose();
     }
     scene.clear();
-    renderer.forceContextLoss();
   });
 
   function cleanUpZones(forced = false) {
@@ -349,19 +364,18 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   const clock = new THREE.Clock();
   const stats = new Stats();
+  stats.dom.style.position = "absolute";
+
   const raycaster = new THREE.Raycaster();
   const mouse = new THREE.Vector2(1, 1);
-  function animate() {
+  function animate(renderer: THREE.WebGLRenderer) {
     stats.update();
 
     const delta = clock.getDelta();
     controls?.update(delta);
-    // flyControls?.update(delta);
 
-    if (resizeRendererToDisplaySize()) {
-      const canvas = renderer.domElement;
-      camera.aspect = canvas.clientWidth / canvas.clientHeight;
-      camera.updateProjectionMatrix();
+    if (resizeRendererToDisplaySize(renderer)) {
+      adjustCameraAspect(camera, canvasElement);
     }
 
     raycaster.setFromCamera(mouse, camera);
@@ -371,31 +385,28 @@ export default function ZoneModel(props: ZoneDataProps) {
     labelRenderer.render(scene, camera);
   }
 
-  function resizeRendererToDisplaySize() {
-    const canvas = renderer.domElement;
+  function resizeRendererToDisplaySize(renderer: THREE.WebGLRenderer) {
+    const canvas = canvasElement;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
     const needResize = canvas.width !== width || canvas.height !== height;
     if (needResize) {
       renderer.setSize(width, height, false);
       labelRenderer.setSize(width, height);
-      labelRenderer.domElement.style.top = `calc(${renderer.domElement.offsetTop}px - 1.5rem)`;
-      stats.dom.style.top = `calc(${renderer.domElement.offsetTop}px)`;
-      stats.dom.style.left = `calc(${renderer.domElement.offsetLeft}px)`;
+      labelRenderer.domElement.style.top = `calc(${canvas.offsetTop}px - 1.5rem)`;
     }
     return needResize;
   }
 
-  renderer.domElement.addEventListener("mousemove", event => {
-    const canvas = renderer.domElement;
-    mouse.x = (2 * event.offsetX) / canvas.offsetWidth - 1;
-    mouse.y = (-2 * event.offsetY) / canvas.offsetHeight + 1;
-  });
-
   const currentEntityUpdates = createMemo(() => {
     const key = getSelectedZone();
     if (key !== undefined && parsedEntityUpdates()) {
-      return parsedEntityUpdates()[key];
+      const updates = parsedEntityUpdates()[key];
+      if (updates) {
+        setStartTime(updates.firstTime);
+        setEndTime(updates.lastTime);
+        return updates;
+      }
     }
   });
 
@@ -416,21 +427,36 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   return (
     <div class="w-full h-full">
-      {renderer.domElement}
-      {labelRenderer.domElement}
-      {stats.dom}
+      <div class="m-auto relative" style={{ "max-height": "60vh" }}>
+        <canvas class="block w-full" ref={canvasElement}></canvas>
+        {labelRenderer.domElement}
+        {import.meta.env.DEV ? stats.dom : undefined}
+      </div>
       <Show when={props.entityUpdates}>
         <Show
           fallback={zoneSelector}
           when={getSelectedZone() in parsedEntityUpdates()}
         >
-          <RangeInput
-            min={currentEntityUpdates().minTime}
-            max={currentEntityUpdates().maxTime}
-            inputKind="timestamp"
-            onChange={onTimeRangeChange}
-          >
-          </RangeInput>
+          <div class="flex flex-row my-2">
+            <div class="px-1 m-auto h-max">
+              <button style={{ "min-width": "200px" }} onClick={() => setShowDiscrete(!getShowDiscrete())}>
+                {getShowDiscrete() ? "Disable discrete points" : "Enable discrete points"}
+              </button>
+            </div>
+            <div class="flex-grow">
+              <RangeInput
+                min={currentEntityUpdates().firstTime}
+                max={currentEntityUpdates().lastTime}
+                lower={getStartTime()}
+                upper={getEndTime()}
+                inputKind="timestamp"
+                onChangeLower={setStartTime}
+                onChangeUpper={setEndTime}
+                disabled={!getShowDiscrete()}
+              >
+              </RangeInput>
+            </div>
+          </div>
 
           <Table
             inputRows={currentEntityUpdates().entityRows}
@@ -448,11 +474,6 @@ export default function ZoneModel(props: ZoneDataProps) {
                   <input
                     type="checkbox"
                     checked={!entitySettings[v.entityKey]?.hidden}
-                    onChange={e => {
-                      setEntitySettings(v.entityKey, {
-                        hidden: e.target.checked,
-                      });
-                    }}
                   />
                 ),
               },
