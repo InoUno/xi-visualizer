@@ -192,6 +192,10 @@ export default function ZoneModel(props: ZoneDataProps) {
   const [getPlayTime, setPlayTime] = createSignal<number>(0);
   const [getTimeScale, setTimeScale] = createSignal<number>(10);
 
+  const getPlayTimeMax = () => {
+    return (currentEntityUpdates().lastTime - currentEntityUpdates().firstTime) / 1000;
+  };
+
   // Common entity setup
   const mobColor = new THREE.Color(0xFF0000);
   const widescanColor = new THREE.Color(0xE000DC);
@@ -494,7 +498,7 @@ export default function ZoneModel(props: ZoneDataProps) {
     if (isPlaying()) {
       if (!isSeeking()) {
         const playTime = getPlayTime();
-        setPlayTime(playTime + delta * getTimeScale());
+        setPlayTime((playTime + delta * getTimeScale()) % getPlayTimeMax());
       }
       for (const mixer of mixers()) {
         mixer.setTime(getPlayTime());
