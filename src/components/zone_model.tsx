@@ -187,6 +187,7 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
   });
 
+  const [getShowAnimated, setShowAnimated] = createSignal<boolean>(true);
   const [isPlaying, setIsPlaying] = createSignal<boolean>(false);
   const [isSeeking, setIsSeeking] = createSignal<boolean>(false);
   const [getPlayTime, setPlayTime] = createSignal<number>(0);
@@ -203,6 +204,10 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   // Setup animations for entities
   const mixers = createMemo(() => {
+    if (!getShowAnimated()) {
+      return [];
+    }
+
     let parsedUpdates = parsedEntityUpdates();
     let mixers: THREE.AnimationMixer[] = [];
 
@@ -293,6 +298,7 @@ export default function ZoneModel(props: ZoneDataProps) {
 
         const clipAction = mixer.clipAction(clip);
         clipAction.play();
+        mixer.update(0);
       }
     }
 
@@ -500,9 +506,6 @@ export default function ZoneModel(props: ZoneDataProps) {
         const playTime = getPlayTime();
         setPlayTime((playTime + delta * getTimeScale()) % getPlayTimeMax());
       }
-      for (const mixer of mixers()) {
-        mixer.setTime(getPlayTime());
-      }
     }
 
     raycaster.setFromCamera(mouse, camera);
@@ -511,6 +514,12 @@ export default function ZoneModel(props: ZoneDataProps) {
     renderer.render(scene, camera);
     labelRenderer.render(scene, camera);
   }
+
+  createEffect(() => {
+    for (const mixer of mixers()) {
+      mixer.setTime(getPlayTime());
+    }
+  });
 
   function resizeRendererToDisplaySize(renderer: THREE.WebGLRenderer) {
     const canvas = canvasElement;
@@ -566,22 +575,33 @@ export default function ZoneModel(props: ZoneDataProps) {
           when={getSelectedZone() in parsedEntityUpdates()}
         >
           <div class="flex flex-row my-2">
+            <div class="m-auto h-full px-1 font-bold" style={{ "min-width": "6rem" }}>
+              Animated:
+            </div>
             <div class="m-auto h-full px-1">
-              <button style={{ "min-width": "100px" }} onClick={() => setIsPlaying(!isPlaying())}>
+              <button style={{ "min-width": "5rem" }} onClick={() => setShowAnimated(!getShowAnimated())}>
+                {getShowAnimated() ? "Hide" : "Show"}
+              </button>
+            </div>
+            <div class="m-auto h-full px-1">
+              <button style={{ "min-width": "5rem" }} onClick={() => setIsPlaying(!isPlaying())}>
                 {isPlaying() ? "Pause" : "Play"}
               </button>
             </div>
-            <div class="m-auto">
+            <div class="m-auto relative">
               <input
                 type="number"
-                class="text-center"
+                class="text-right pr-3"
                 min={1}
                 max={1000}
-                style={{ width: "70px" }}
+                style={{ width: "4.5rem" }}
                 value={getTimeScale()}
                 onInput={e => setTimeScale(parseInt(e.target.value) || 1)}
               >
               </input>
+              <span style={{ position: "absolute", right: "0.8rem", top: "0.5rem", margin: "auto" }}>
+                ×
+              </span>
             </div>
             <div class="m-auto flex-grow">
               <input
@@ -598,9 +618,12 @@ export default function ZoneModel(props: ZoneDataProps) {
             </div>
           </div>
           <div class="flex flex-row my-2">
+            <div class="m-auto h-full px-1 font-bold" style={{ "min-width": "6rem" }}>
+              Discrete:
+            </div>
             <div class="px-1 m-auto h-full">
-              <button style={{ "min-width": "200px" }} onClick={() => setShowDiscrete(!getShowDiscrete())}>
-                {getShowDiscrete() ? "Hide discrete points" : "Show discrete points"}
+              <button style={{ "min-width": "5rem" }} onClick={() => setShowDiscrete(!getShowDiscrete())}>
+                {getShowDiscrete() ? "Hide" : "Show"}
               </button>
             </div>
             <div class="flex-grow">
