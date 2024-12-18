@@ -216,6 +216,10 @@ export default function ZoneModel(props: ZoneDataProps) {
       const length = parsedUpdates[zoneId].lastTime - startTime;
 
       for (const entityKey in props.entityUpdates[zoneId]) {
+        if (entitySettings[entityKey].hidden) {
+          continue;
+        }
+
         const updates = props.entityUpdates[zoneId][entityKey];
 
         // Count how long the arrays needs to be.
