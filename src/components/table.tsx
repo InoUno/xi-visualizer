@@ -76,7 +76,7 @@ export default function Table<
     <div>
       <div class="flex flex-row space-x-5 mt-2">
         <input
-          class="m-1 p-1 text-input"
+          class="m-1"
           placeholder="Filter"
           ref={inputRef!}
           oninput={e => setFilterBy(e.target.value ?? "")}

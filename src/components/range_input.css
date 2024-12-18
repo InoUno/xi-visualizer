@@ -25,6 +25,10 @@
             width: 100%;
             height: 0.5rem;
             top: 0rem;
+            padding: 0;
+            border: 0;
+            display: block;
+            margin: auto;
             cursor: pointer;
             background: none;
             pointer-events: none;

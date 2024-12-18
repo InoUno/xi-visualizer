@@ -37,7 +37,7 @@ input:focus {
         disabled:hover:border-slate-600;
   }
 
-  input.text-input, input[type="time"], input[type="datetime-local"] {
+  input {
     @apply block m-1 py-1 px-2 rounded-md
         bg-slate-700 border border-slate-400 
         placeholder:text-slate-400

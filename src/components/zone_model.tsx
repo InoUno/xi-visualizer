@@ -8,7 +8,7 @@ import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRe
 import { addCustomCameraControls, addMapControls, adjustCameraAspect, fitCameraToContents } from "../graphics/camera";
 import { setupBaseScene } from "../graphics/scene";
 import { cleanupNode } from "../graphics/util";
-import { EntityUpdate, EntityUpdateKind, ZoneEntityUpdates } from "../parse_packets";
+import { EntityUpdate, EntityUpdateKind, Position, PositionUpdate, ZoneEntityUpdates } from "../parse_packets";
 import { ByZone } from "../types";
 import LookupInput from "./lookup_input";
 import RangeInput from "./range_input";
@@ -44,7 +44,8 @@ interface EntityRow {
   entityKey: string;
   updateCount: number;
 }
-interface ParsedEntityUpdates {
+
+interface NormalizedEntityUpdates {
   entityRows: EntityRow[];
   firstTime: number;
   lastTime: number;
@@ -58,9 +59,9 @@ export default function ZoneModel(props: ZoneDataProps) {
   const [entitySettings, setEntitySettings] = createStore<EntitiesSettings>();
   const [zoneMeshes, setZoneMeshes] = createStore<ByZone<THREE.Mesh>>();
 
-  const [getShowDiscrete, setShowDiscrete] = createSignal<boolean>(true);
-  const [getStartTime, setStartTime] = createSignal<number>(0);
-  const [getEndTime, setEndTime] = createSignal<number>(1);
+  const [getShowDiscrete, setShowDiscrete] = createSignal<boolean>(false);
+  const [getDiscreteLowerTime, setDiscreteLowerTime] = createSignal<number>(0);
+  const [getDiscreteUpperTime, setDiscreteUpperTime] = createSignal<number>(1);
 
   const parsedEntityUpdates = createMemo(() => {
     if (!props.entityUpdates) {
@@ -68,7 +69,7 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
 
     let result: {
-      [zoneId: number]: ParsedEntityUpdates;
+      [zoneId: number]: NormalizedEntityUpdates;
     } = {};
 
     Object.keys(props.entityUpdates).forEach(zoneId => {
@@ -186,17 +187,129 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
   });
 
-  // Setup meshes for entities
-  let currentZoneEntities: ByZone<{ [entityKey: string]: THREE.InstancedMesh; }> = {};
+  const [isPlaying, setIsPlaying] = createSignal<boolean>(false);
+  const [isSeeking, setIsSeeking] = createSignal<boolean>(false);
+  const [getPlayTime, setPlayTime] = createSignal<number>(0);
+  const [getTimeScale, setTimeScale] = createSignal<number>(10);
+
+  // Common entity setup
   const mobColor = new THREE.Color(0xFF0000);
   const widescanColor = new THREE.Color(0xE000DC);
   const geo = new THREE.CapsuleGeometry();
+
+  // Setup animations for entities
+  const mixers = createMemo(() => {
+    let parsedUpdates = parsedEntityUpdates();
+    let mixers: THREE.AnimationMixer[] = [];
+
+    for (const zoneId in props.entityUpdates) {
+      const startTime = parsedUpdates[zoneId].firstTime;
+      const length = parsedUpdates[zoneId].lastTime - startTime;
+
+      for (const entityKey in props.entityUpdates[zoneId]) {
+        const updates = props.entityUpdates[zoneId][entityKey];
+
+        // Count how long the arrays needs to be.
+        let count = 0;
+        let prevPosUpdate: PositionUpdate | undefined = undefined;
+        for (const update of updates) {
+          if (update.kind == EntityUpdateKind.Position) {
+            if (!prevPosUpdate) {
+              // No previous position, so add a hidden frame just before this one.
+              count++;
+            } else if (prevPosUpdate && update.time > (prevPosUpdate.time + 20000)) {
+              // Long time since last position, so add hide+show frames
+              count += 2;
+            }
+            prevPosUpdate = update;
+            count++;
+          }
+        }
+
+        if (count == 0) {
+          continue;
+        }
+        count++; // Last hiding frame
+
+        const times = new Float32Array(count);
+        const opacity = new Float32Array(count);
+        const positions = new Float32Array(count * 3);
+        const scale = new Float32Array(count * 3);
+
+        let i = 0;
+        const addFrame = (pos: Position, time: number, show: boolean = true) => {
+          times[i] = (time - startTime) / 1000;
+          const showNum = show ? 1 : 0;
+          opacity[i] = showNum;
+          scale.set([showNum, showNum, showNum], i * 3);
+          positions.set([pos.x, pos.y * -1 + 1, pos.z], i * 3);
+          i++;
+        };
+
+        prevPosUpdate = undefined;
+        for (const update of updates) {
+          if (update.kind == EntityUpdateKind.Position) {
+            if (!prevPosUpdate) {
+              // No previous position, so add a hidden frame just before this one.
+              addFrame(update.pos, update.time - 1000, false);
+            } else if (prevPosUpdate && update.time > (prevPosUpdate.time + 20000)) {
+              // Long time since last position, so add hide+show frames
+              addFrame(prevPosUpdate.pos, prevPosUpdate.time + 1000, false);
+              addFrame(update.pos, update.time - 1000, false);
+            }
+            // Add current position frame
+            addFrame(update.pos, update.time, true);
+            prevPosUpdate = update;
+          } else if (update.kind == EntityUpdateKind.Spawn) {
+            // TODO
+          } else if (update.kind == EntityUpdateKind.Despawn) {
+            // TODO
+          }
+        }
+
+        // Add final hide frame
+        addFrame(prevPosUpdate.pos, prevPosUpdate.time + 1000, false);
+
+        const positionKF = new THREE.VectorKeyframeTrack(".position", times, positions);
+        const scaleKF = new THREE.VectorKeyframeTrack(".scale", times, scale);
+        const opacityKF = new THREE.NumberKeyframeTrack(".material.opacity", times, opacity);
+        const clip = new THREE.AnimationClip(entityKey, length / 1000, [positionKF, scaleKF, opacityKF]);
+
+        const mat = new THREE.MeshToonMaterial({
+          color: mobColor,
+          opacity: 1,
+          transparent: true,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        scene.add(mesh);
+
+        const mixer = new THREE.AnimationMixer(mesh);
+        mixer.timeScale = 1;
+        mixers.push(mixer);
+
+        const clipAction = mixer.clipAction(clip);
+        clipAction.play();
+      }
+    }
+
+    onCleanup(() => {
+      for (const mixer of mixers) {
+        const mesh = mixer.getRoot() as THREE.Mesh;
+        cleanupNode(mesh);
+        scene.remove(mesh);
+      }
+    });
+    return mixers;
+  });
+
+  // Setup meshes for entities
+  let discreteEntityMeshes: ByZone<{ [entityKey: string]: THREE.InstancedMesh; }> = {};
   const mat = new THREE.MeshToonMaterial();
   createEffect(() => {
     cleanUpEntities();
 
     for (const zoneId in props.entityUpdates) {
-      const entities = (currentZoneEntities[zoneId] = currentZoneEntities[zoneId] || {});
+      const entities = (discreteEntityMeshes[zoneId] = discreteEntityMeshes[zoneId] || {});
 
       for (const entityKey in props.entityUpdates[zoneId]) {
         const updates = props.entityUpdates[zoneId][entityKey];
@@ -215,7 +328,7 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
 
     const zoneId = getSelectedZone();
-    const entities = currentZoneEntities[zoneId];
+    const entities = discreteEntityMeshes[zoneId];
     let obj = new THREE.Object3D();
     for (const entityKey in props.entityUpdates[zoneId]) {
       if (entitySettings[entityKey]?.hidden) {
@@ -227,26 +340,26 @@ export default function ZoneModel(props: ZoneDataProps) {
 
       // Skip until first visible update
       let idx = 0;
-      while (idx < updates.length && updates[idx].time < getStartTime()) {
+      while (idx < updates.length && updates[idx].time < getDiscreteLowerTime()) {
         idx++;
       }
 
       let showCount = 0;
       // Add until last visible update
-      while (idx < updates.length && updates[idx].time <= getEndTime()) {
+      while (idx < updates.length && updates[idx].time <= getDiscreteUpperTime()) {
         const update = updates[idx];
         if (update.kind !== EntityUpdateKind.Position && update.kind !== EntityUpdateKind.Widescan) {
           // Only add positional updates
           continue;
         }
 
-        obj.position.set(update.pos.x, update.pos.y * -1 + 1, update.pos.z);
+        obj.position.set(update.pos.x, update.pos.y * -1, update.pos.z);
         obj.updateMatrix();
         mesh.setMatrixAt(showCount, obj.matrix);
         if (update.kind == EntityUpdateKind.Position) {
-          mesh.setColorAt(idx, mobColor);
+          mesh.setColorAt(showCount, mobColor);
         } else {
-          mesh.setColorAt(idx, widescanColor);
+          mesh.setColorAt(showCount, widescanColor);
         }
         idx++;
         showCount++;
@@ -285,7 +398,7 @@ export default function ZoneModel(props: ZoneDataProps) {
     for (const entityKey in entitySettings) {
       const entityId = parseInt(entityKey.split("-")[1]);
       const zoneId = (entityId >> 12) & 0x01ff;
-      currentZoneEntities[zoneId][entityKey].visible = getShowDiscrete() && !entitySettings[entityKey].hidden;
+      discreteEntityMeshes[zoneId][entityKey].visible = getShowDiscrete() && !entitySettings[entityKey].hidden;
     }
   });
 
@@ -353,9 +466,9 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   function cleanUpEntities(forced = false) {
     // Remove old entities
-    for (const zoneId in currentZoneEntities) {
-      for (const entityKey in currentZoneEntities[zoneId]) {
-        const mesh = currentZoneEntities[zoneId][entityKey];
+    for (const zoneId in discreteEntityMeshes) {
+      for (const entityKey in discreteEntityMeshes[zoneId]) {
+        const mesh = discreteEntityMeshes[zoneId][entityKey];
         scene.remove(mesh);
         cleanupNode(mesh);
       }
@@ -376,6 +489,16 @@ export default function ZoneModel(props: ZoneDataProps) {
 
     if (resizeRendererToDisplaySize(renderer)) {
       adjustCameraAspect(camera, canvasElement);
+    }
+
+    if (isPlaying()) {
+      if (!isSeeking()) {
+        const playTime = getPlayTime();
+        setPlayTime(playTime + delta * getTimeScale());
+      }
+      for (const mixer of mixers()) {
+        mixer.setTime(getPlayTime());
+      }
     }
 
     raycaster.setFromCamera(mouse, camera);
@@ -403,8 +526,9 @@ export default function ZoneModel(props: ZoneDataProps) {
     if (key !== undefined && parsedEntityUpdates()) {
       const updates = parsedEntityUpdates()[key];
       if (updates) {
-        setStartTime(updates.firstTime);
-        setEndTime(updates.lastTime);
+        setDiscreteLowerTime(updates.firstTime);
+        setDiscreteUpperTime(updates.lastTime);
+        setPlayTime(0);
         return updates;
       }
     }
@@ -438,20 +562,52 @@ export default function ZoneModel(props: ZoneDataProps) {
           when={getSelectedZone() in parsedEntityUpdates()}
         >
           <div class="flex flex-row my-2">
-            <div class="px-1 m-auto h-max">
+            <div class="m-auto h-full px-1">
+              <button style={{ "min-width": "100px" }} onClick={() => setIsPlaying(!isPlaying())}>
+                {isPlaying() ? "Pause" : "Play"}
+              </button>
+            </div>
+            <div class="m-auto">
+              <input
+                type="number"
+                class="text-center"
+                min={1}
+                max={1000}
+                style={{ width: "70px" }}
+                value={getTimeScale()}
+                onInput={e => setTimeScale(parseInt(e.target.value) || 1)}
+              >
+              </input>
+            </div>
+            <div class="m-auto flex-grow">
+              <input
+                type="range"
+                class="w-full"
+                min={currentEntityUpdates().firstTime}
+                max={currentEntityUpdates().lastTime}
+                value={getPlayTime() * 1000 + currentEntityUpdates().firstTime}
+                onMouseDown={() => setIsSeeking(true)}
+                onMouseUp={() => setIsSeeking(false)}
+                onInput={e => setPlayTime((parseInt(e.target.value) - currentEntityUpdates().firstTime) / 1000)}
+              >
+              </input>
+            </div>
+          </div>
+          <div class="flex flex-row my-2">
+            <div class="px-1 m-auto h-full">
               <button style={{ "min-width": "200px" }} onClick={() => setShowDiscrete(!getShowDiscrete())}>
-                {getShowDiscrete() ? "Disable discrete points" : "Enable discrete points"}
+                {getShowDiscrete() ? "Hide discrete points" : "Show discrete points"}
               </button>
             </div>
             <div class="flex-grow">
               <RangeInput
                 min={currentEntityUpdates().firstTime}
                 max={currentEntityUpdates().lastTime}
-                lower={getStartTime()}
-                upper={getEndTime()}
+                lower={getDiscreteLowerTime()}
+                upper={getDiscreteUpperTime()}
                 inputKind="timestamp"
-                onChangeLower={setStartTime}
-                onChangeUpper={setEndTime}
+                onChangeLower={setDiscreteLowerTime}
+                onChangeUpper={setDiscreteUpperTime}
                 disabled={!getShowDiscrete()}
               >
               </RangeInput>

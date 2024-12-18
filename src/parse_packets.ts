@@ -3,7 +3,7 @@ const PACKET_KIND = /(Incoming|Outgoing) packet\s(0x[\dA-F]+)/;
 
 const PACKET_TIMESTAMP = /^\[([^\]]+)\]/;
 
-interface Position {
+export interface Position {
   x: number;
   y: number;
   z: number;
@@ -21,16 +21,16 @@ export const enum EntityUpdateKind {
   Despawn,
 }
 
-interface PositionUpdate extends BaseEntityUpdate {
+export interface PositionUpdate extends BaseEntityUpdate {
   kind: EntityUpdateKind.Position | EntityUpdateKind.Widescan;
   pos: Position;
 }
 
-interface SpawnUpdate extends BaseEntityUpdate {
+export interface SpawnUpdate extends BaseEntityUpdate {
   kind: EntityUpdateKind.Spawn;
 }
 
-interface DespawnUpdate extends BaseEntityUpdate {
+export interface DespawnUpdate extends BaseEntityUpdate {
   kind: EntityUpdateKind.Despawn;
 }
 
