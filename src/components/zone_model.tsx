@@ -1,7 +1,8 @@
+import * as THREE from "three";
+// import "../graphics/bvh";
 import CameraControls from "camera-controls";
 import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { createStore } from "solid-js/store";
-import * as THREE from "three";
 import Stats from "three/addons/libs/stats.module.js";
 import { FlyControls, MapControls } from "three/examples/jsm/Addons.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
@@ -13,6 +14,13 @@ import { ByZone } from "../types";
 import LookupInput from "./lookup_input";
 import RangeInput from "./range_input";
 import Table from "./table";
+
+import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
+
+// Add the extension functions
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
 interface ZoneDataProps {
   zoneData: ByZone<ZoneData>;
@@ -158,6 +166,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
       geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
       geometry.computeBoundingBox();
+      geometry.computeBoundsTree();
 
       const material = new THREE.MeshLambertMaterial({
         color: 0x333333,
@@ -168,6 +177,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       });
 
       const mesh = new THREE.Mesh(geometry, material);
+
       setZoneMeshes(parseInt(zoneId), mesh);
 
       // Add wireframe
@@ -416,23 +426,11 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
   });
 
-  // Setup labels
-  const labelRenderer = new CSS2DRenderer();
-  labelRenderer.setSize(innerWidth, innerHeight);
-  labelRenderer.domElement.style.position = "absolute";
-  labelRenderer.domElement.style.top = "0px";
-  labelRenderer.domElement.style.pointerEvents = "none";
-
-  const labelDiv = document.createElement("div");
-  labelDiv.style.padding = "0.1rem 0.4rem";
-  labelDiv.style.background = "rgba(0,0,0,0.7)";
-  labelDiv.style.color = "0xFFFFFF";
-  const label = new CSS2DObject(labelDiv);
-  label.visible = false;
-  scene.add(label);
-
-  let controls: CameraControls | FlyControls | MapControls = undefined!;
+  let controls: CameraControls | FlyControls | MapControls;
   let canvasElement: HTMLCanvasElement;
+  let labelElementRef: HTMLDivElement;
+
+  let hasMouseMovedSinceLast = false;
 
   onMount(() => {
     const parentRect = canvasElement.parentElement?.getBoundingClientRect();
@@ -441,15 +439,22 @@ export default function ZoneModel(props: ZoneDataProps) {
     adjustCameraAspect(camera, canvasElement);
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true, alpha: true });
-    renderer.setAnimationLoop(() => animate(renderer));
 
     canvasElement.addEventListener("mousemove", event => {
       const canvas = canvasElement;
-      mouse.x = (2 * event.offsetX) / canvas.offsetWidth - 1;
-      mouse.y = (-2 * event.offsetY) / canvas.offsetHeight + 1;
+      cameraMouse.x = (2 * event.offsetX) / canvas.offsetWidth - 1;
+      cameraMouse.y = (-2 * event.offsetY) / canvas.offsetHeight + 1;
+      screenMouse.x = event.offsetX;
+      screenMouse.y = event.offsetY;
+      hasMouseMovedSinceLast = true;
+    });
+    canvasElement.addEventListener("mouseout", event => {
+      labelElementRef.style.display = "none";
     });
 
     controls = addMapControls(camera, canvasElement);
+
+    renderer.setAnimationLoop(() => animate(renderer));
   });
 
   onCleanup(() => {
@@ -494,7 +499,24 @@ export default function ZoneModel(props: ZoneDataProps) {
   stats.dom.style.position = "absolute";
 
   const raycaster = new THREE.Raycaster();
-  const mouse = new THREE.Vector2(1, 1);
+  raycaster.firstHitOnly = true;
+  const cameraMouse = new THREE.Vector2(1, 1);
+  const screenMouse = new THREE.Vector2(1, 1);
+
+  function castRay() {
+    raycaster.setFromCamera(cameraMouse, camera);
+    const intersections = raycaster.intersectObjects([zoneMeshes[getSelectedZone()]]);
+    if (intersections.length > 0) {
+      const intersection = intersections[0];
+      labelElementRef.textContent = `${intersection.point.x.toFixed(1)}, ${(intersection.point.y * -1).toFixed(1)}, ${(intersection.point.z * -1).toFixed(1)}`;
+      labelElementRef.style.left = `${screenMouse.x + 20}px`;
+      labelElementRef.style.top = `${screenMouse.y - 20}px`;
+      labelElementRef.style.display = "block";
+    } else {
+      labelElementRef.style.display = "none";
+    }
+  }
+
   function animate(renderer: THREE.WebGLRenderer) {
     stats.update();
 
@@ -505,6 +527,11 @@ export default function ZoneModel(props: ZoneDataProps) {
       adjustCameraAspect(camera, canvasElement);
     }
 
+    if (hasMouseMovedSinceLast) {
+      hasMouseMovedSinceLast = false;
+      castRay();
+    }
+
     if (isPlaying()) {
       if (!isSeeking()) {
         const playTime = getPlayTime();
@@ -512,11 +539,8 @@ export default function ZoneModel(props: ZoneDataProps) {
       }
     }
 
-    raycaster.setFromCamera(mouse, camera);
-
     renderer.clear();
     renderer.render(scene, camera);
-    labelRenderer.render(scene, camera);
   }
 
   createEffect(() => {
@@ -532,8 +556,8 @@ export default function ZoneModel(props: ZoneDataProps) {
     const needResize = canvas.width !== width || canvas.height !== height;
     if (needResize) {
       renderer.setSize(width, height, false);
-      labelRenderer.setSize(width, height);
-      labelRenderer.domElement.style.top = `calc(${canvas.offsetTop}px - 1.5rem)`;
+      // labelRenderer.setSize(width, height);
+      // labelRenderer.domElement.style.top = `calc(${canvas.offsetTop}px - 1.5rem)`;
     }
     return needResize;
   }
@@ -570,7 +594,11 @@ export default function ZoneModel(props: ZoneDataProps) {
     <div class="w-full h-full">
       <div class="m-auto relative" style={{ "max-height": "60vh" }}>
         <canvas class="block w-full" ref={canvasElement}></canvas>
-        {labelRenderer.domElement}
+        <div
+          class="absolute p-1 text-white bg-black pointer-events-none rounded font-mono opacity-70 text-sm"
+          ref={labelElementRef}
+        >
+        </div>
         {import.meta.env.DEV ? stats.dom : undefined}
       </div>
       <Show when={props.entityUpdates}>

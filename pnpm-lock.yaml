@@ -35,6 +35,9 @@ importers:
       three:
         specifier: ^0.171.0
         version: 0.171.0
+      three-mesh-bvh:
+        specifier: ^0.8.3
+        version: 0.8.3(three@0.171.0)
     devDependencies:
       '@types/three':
         specifier: ^0.170.0
@@ -1101,6 +1104,11 @@ packages:
 
   thenify@3.3.1:
     resolution: {integrity: sha512-RVZSIV5IG10Hk3enotrhvz0T9em6cyHBLkH/YAZuKqd8hRkKhSfCGIcP2KUY0EPxndzANBmNllzWPwak+bheSw==}
+
+  three-mesh-bvh@0.8.3:
+    resolution: {integrity: sha512-4G5lBaF+g2auKX3P0yqx+MJC6oVt6sB5k+CchS6Ob0qvH0YIhuUk1eYr7ktsIpY+albCqE80/FVQGV190PmiAg==}
+    peerDependencies:
+      three: '>= 0.159.0'
 
   three@0.171.0:
     resolution: {integrity: sha512-Y/lAXPaKZPcEdkKjh0JOAHVv8OOnv/NDJqm0wjfCzyQmfKxV7zvkwsnBgPBKTzJHToSOhRGQAGbPJObT59B/PQ==}
@@ -2191,6 +2199,10 @@ snapshots:
   thenify@3.3.1:
     dependencies:
       any-promise: 1.3.0
+
+  three-mesh-bvh@0.8.3(three@0.171.0):
+    dependencies:
+      three: 0.171.0
 
   three@0.171.0: {}
 
