@@ -226,6 +226,10 @@ export default function ZoneModel(props: ZoneDataProps) {
 
     const zoneId = getSelectedZone();
     let parsedUpdates = parsedEntityUpdates();
+    if (!parsedUpdates[zoneId]) {
+      return [];
+    }
+
     let mixers: THREE.AnimationMixer[] = [];
 
     const startTime = parsedUpdates[zoneId].firstTime;
