@@ -16,6 +16,7 @@ import RangeInput from "./range_input";
 import Table from "./table";
 
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
+import { binarySearchLower } from "../util";
 
 // Add the extension functions
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -25,6 +26,7 @@ THREE.Mesh.prototype.raycast = acceleratedRaycast;
 interface ZoneDataProps {
   zoneData: ByZone<ZoneData>;
   entityUpdates?: ZoneEntityUpdates;
+  clientUpdates?: PositionUpdate[];
 }
 
 export interface ZoneData {
@@ -211,6 +213,8 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   // Common entity setup
   const mobColor = new THREE.Color(0xFF0000);
+  const clientColor = new THREE.Color(0x0000FF);
+  const npcColor = new THREE.Color(0x00FF00);
   const widescanColor = new THREE.Color(0xE000DC);
   const geo = new THREE.CapsuleGeometry();
 
@@ -220,102 +224,139 @@ export default function ZoneModel(props: ZoneDataProps) {
       return [];
     }
 
+    const zoneId = getSelectedZone();
     let parsedUpdates = parsedEntityUpdates();
     let mixers: THREE.AnimationMixer[] = [];
 
-    for (const zoneId in props.entityUpdates) {
-      const startTime = parsedUpdates[zoneId].firstTime;
-      const length = parsedUpdates[zoneId].lastTime - startTime;
+    const startTime = parsedUpdates[zoneId].firstTime;
+    const endTime = parsedUpdates[zoneId].lastTime;
+    const length = endTime - startTime;
 
-      for (const entityKey in props.entityUpdates[zoneId]) {
-        if (entitySettings[entityKey].hidden) {
-          continue;
-        }
+    for (const entityKey in props.entityUpdates[zoneId]) {
+      if (entitySettings[entityKey].hidden) {
+        continue;
+      }
 
-        const updates = props.entityUpdates[zoneId][entityKey];
+      const updates = props.entityUpdates[zoneId][entityKey];
 
-        // Count how long the arrays needs to be.
-        let count = 0;
-        let prevPosUpdate: PositionUpdate | undefined = undefined;
-        for (const update of updates) {
-          if (update.kind == EntityUpdateKind.Position) {
-            if (!prevPosUpdate) {
-              // No previous position, so add a hidden frame just before this one.
-              count++;
-            } else if (prevPosUpdate && update.time > (prevPosUpdate.time + 20000)) {
-              // Long time since last position, so add hide+show frames
-              count += 2;
-            }
-            prevPosUpdate = update;
+      // Count how long the arrays needs to be.
+      let count = 0;
+      let prevPosUpdate: PositionUpdate | undefined = undefined;
+      for (const update of updates) {
+        if (update.kind == EntityUpdateKind.Position) {
+          if (!prevPosUpdate) {
+            // No previous position, so add a hidden frame just before this one.
             count++;
           }
+          prevPosUpdate = update;
+          count++;
+        } else if (prevPosUpdate && update.kind == EntityUpdateKind.OutOfRange) {
+          // Out of range
+          prevPosUpdate = undefined;
+          count++;
         }
-
-        if (count == 0) {
-          continue;
-        }
-        count++; // Last hiding frame
-
-        const times = new Float32Array(count);
-        const opacity = new Float32Array(count);
-        const positions = new Float32Array(count * 3);
-        const scale = new Float32Array(count * 3);
-
-        let i = 0;
-        const addFrame = (pos: Position, time: number, show: boolean = true) => {
-          times[i] = (time - startTime) / 1000;
-          const showNum = show ? 1 : 0;
-          opacity[i] = showNum;
-          scale.set([showNum, showNum, showNum], i * 3);
-          positions.set([pos.x, pos.y * -1 + 1, pos.z], i * 3);
-          i++;
-        };
-
-        prevPosUpdate = undefined;
-        for (const update of updates) {
-          if (update.kind == EntityUpdateKind.Position) {
-            if (!prevPosUpdate) {
-              // No previous position, so add a hidden frame just before this one.
-              addFrame(update.pos, update.time - 1000, false);
-            } else if (prevPosUpdate && update.time > (prevPosUpdate.time + 20000)) {
-              // Long time since last position, so add hide+show frames
-              addFrame(prevPosUpdate.pos, prevPosUpdate.time + 1000, false);
-              addFrame(update.pos, update.time - 1000, false);
-            }
-            // Add current position frame
-            addFrame(update.pos, update.time, true);
-            prevPosUpdate = update;
-          } else if (update.kind == EntityUpdateKind.Spawn) {
-            // TODO
-          } else if (update.kind == EntityUpdateKind.Despawn) {
-            // TODO
-          }
-        }
-
-        // Add final hide frame
-        addFrame(prevPosUpdate.pos, prevPosUpdate.time + 1000, false);
-
-        const positionKF = new THREE.VectorKeyframeTrack(".position", times, positions);
-        const scaleKF = new THREE.VectorKeyframeTrack(".scale", times, scale);
-        const opacityKF = new THREE.NumberKeyframeTrack(".material.opacity", times, opacity);
-        const clip = new THREE.AnimationClip(entityKey, length / 1000, [positionKF, scaleKF, opacityKF]);
-
-        const mat = new THREE.MeshToonMaterial({
-          color: mobColor,
-          opacity: 1,
-          transparent: true,
-        });
-        const mesh = new THREE.Mesh(geo, mat);
-        scene.add(mesh);
-
-        const mixer = new THREE.AnimationMixer(mesh);
-        mixer.timeScale = 1;
-        mixers.push(mixer);
-
-        const clipAction = mixer.clipAction(clip);
-        clipAction.play();
-        mixer.update(0);
       }
+
+      if (count == 0) {
+        continue;
+      }
+      if (prevPosUpdate) {
+        count++; // Last hiding frame
+      }
+
+      const times = new Float32Array(count);
+      const opacity = new Float32Array(count);
+      const positions = new Float32Array(count * 3);
+      const scale = new Float32Array(count * 3);
+
+      let i = 0;
+      const addFrame = (pos: Position, time: number, show: boolean = true) => {
+        times[i] = (time - startTime) / 1000;
+        const showNum = show ? 1 : 0;
+        opacity[i] = showNum;
+        scale.set([showNum, showNum, showNum], i * 3);
+        positions.set([pos.x, pos.y * -1 + 1, pos.z], i * 3);
+        i++;
+      };
+
+      prevPosUpdate = undefined;
+      for (const update of updates) {
+        if (update.kind == EntityUpdateKind.Position) {
+          if (!prevPosUpdate) {
+            // No previous position, so add a hidden frame just before this one.
+            addFrame(update.pos, update.time - 1000, false);
+          }
+          // Add current position frame
+          addFrame(update.pos, update.time, true);
+          prevPosUpdate = update;
+        } else if (prevPosUpdate && update.kind == EntityUpdateKind.OutOfRange) {
+          addFrame(prevPosUpdate.pos, prevPosUpdate.time + 1000, false);
+          prevPosUpdate = undefined;
+        }
+      }
+
+      // Add final hide frame
+      if (prevPosUpdate) {
+        addFrame(prevPosUpdate.pos, prevPosUpdate.time + 1000, false);
+      }
+
+      const positionKF = new THREE.VectorKeyframeTrack(".position", times, positions);
+      const scaleKF = new THREE.VectorKeyframeTrack(".scale", times, scale);
+      const opacityKF = new THREE.NumberKeyframeTrack(".material.opacity", times, opacity);
+      const clip = new THREE.AnimationClip(entityKey, length / 1000, [positionKF, scaleKF, opacityKF]);
+
+      const mat = new THREE.MeshToonMaterial({
+        color: mobColor,
+        opacity: 1,
+        transparent: true,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      scene.add(mesh);
+
+      const mixer = new THREE.AnimationMixer(mesh);
+      mixer.timeScale = 1;
+      mixers.push(mixer);
+
+      const clipAction = mixer.clipAction(clip);
+      clipAction.play();
+      mixer.update(0);
+    }
+
+    // Client mesh
+    if (props.clientUpdates) {
+      const updates = props.clientUpdates;
+
+      // Count how long the arrays needs to be.
+      let startIdx = binarySearchLower(updates, startTime, x => x.time);
+      let endIdx = binarySearchLower(updates, endTime + 1, x => x.time);
+
+      const count = endIdx - startIdx;
+
+      const times = new Float32Array(count);
+      const positions = new Float32Array(count * 3);
+
+      for (let i = startIdx, j = 0; i < endIdx; i++, j++) {
+        times[j] = (updates[i].time - startTime) / 1000;
+        const pos = updates[i].pos;
+        positions.set([pos.x, pos.y * -1 + 1, pos.z], j * 3);
+      }
+
+      const positionKF = new THREE.VectorKeyframeTrack(".position", times, positions);
+      const clip = new THREE.AnimationClip("client", length / 1000, [positionKF]);
+
+      const mat = new THREE.MeshToonMaterial({
+        color: clientColor,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      scene.add(mesh);
+
+      const mixer = new THREE.AnimationMixer(mesh);
+      mixer.timeScale = 1;
+      mixers.push(mixer);
+
+      const clipAction = mixer.clipAction(clip);
+      clipAction.play();
+      mixer.update(0);
     }
 
     onCleanup(() => {
@@ -365,10 +406,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       const updates = props.entityUpdates[zoneId][entityKey];
 
       // Skip until first visible update
-      let idx = 0;
-      while (idx < updates.length && updates[idx].time < getDiscreteLowerTime()) {
-        idx++;
-      }
+      let idx = binarySearchLower(updates, getDiscreteLowerTime(), x => x.time);
 
       let showCount = 0;
       // Add until last visible update

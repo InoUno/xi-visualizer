@@ -16,10 +16,10 @@ export default function PacketPage({}: PacketPageProps) {
   const [getStatus, setStatus] = createSignal<string | undefined>();
 
   function parseFile(file: File) {
+    setStatus("Parsing packets");
     const reader = new FileReader();
     reader.onload = e => {
       const parser = new PacketParser(e.target.result as string);
-      setStatus("Parsing packets");
       parser.parsePackets();
       setParsedPackets(parser);
     };
@@ -88,7 +88,7 @@ export default function PacketPage({}: PacketPageProps) {
       >
         <Match when={getParsedPackets() !== undefined && getZoneModels() !== undefined}>
           <button onClick={_ => setParsedPackets(undefined)}>Clear packets</button>
-          <ZoneModel entityUpdates={getParsedPackets().zoneEntityUpdates} zoneData={getZoneModels()}>
+          <ZoneModel entityUpdates={getParsedPackets().zoneEntityUpdates} clientUpdates={getParsedPackets().clientUpdates} zoneData={getZoneModels()}>
           </ZoneModel>
         </Match>
         <Match when={getStatus() && !getZoneModels()}>

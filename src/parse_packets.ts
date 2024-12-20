@@ -17,7 +17,7 @@ interface BaseEntityUpdate {
 export const enum EntityUpdateKind {
   Position,
   Widescan,
-  Spawn,
+  OutOfRange,
   Despawn,
 }
 
@@ -26,15 +26,15 @@ export interface PositionUpdate extends BaseEntityUpdate {
   pos: Position;
 }
 
-export interface SpawnUpdate extends BaseEntityUpdate {
-  kind: EntityUpdateKind.Spawn;
+export interface OutOfRangeUpdate extends BaseEntityUpdate {
+  kind: EntityUpdateKind.OutOfRange;
 }
 
 export interface DespawnUpdate extends BaseEntityUpdate {
   kind: EntityUpdateKind.Despawn;
 }
 
-export type EntityUpdate = PositionUpdate | SpawnUpdate | DespawnUpdate;
+export type EntityUpdate = PositionUpdate | OutOfRangeUpdate | DespawnUpdate;
 
 type EntityUpdates = {
   [entityKey: string]: EntityUpdate[];
@@ -51,6 +51,7 @@ export class PacketParser {
   public clientUpdates: PositionUpdate[];
 
   private lastClientPosition: Position;
+  private currentShownEntities: { [entityKey: string]: PositionUpdate; };
   private currentZoneId: number = 0;
 
   constructor(content: string) {
@@ -63,6 +64,7 @@ export class PacketParser {
     console.time("parse-packets");
     this.zoneEntityUpdates = {};
     this.clientUpdates = [];
+    this.currentShownEntities = {};
     let packetCount = 0;
 
     for (let i = 0; i < this.lines.length; i++) {
@@ -76,6 +78,7 @@ export class PacketParser {
         packetCount++;
       }
     }
+    console.log(this);
     console.timeEnd("parse-packets");
   }
 
@@ -130,11 +133,22 @@ export class PacketParser {
 
     let entityPositions = this.zoneEntityUpdates[zoneId] = this.zoneEntityUpdates[zoneId] || {};
     let list = entityPositions[entityKey] = entityPositions[entityKey] || [];
-    list.push({
-      kind: EntityUpdateKind.Position,
+    const update = {
+      kind: EntityUpdateKind.Position as EntityUpdateKind.Position,
       time: timestamp,
       pos,
-    });
+    };
+    list.push(update);
+
+    if (this.isOutOfRangeFromClient(pos)) {
+      list.push({
+        kind: EntityUpdateKind.OutOfRange,
+        time: timestamp,
+      });
+      delete this.currentShownEntities[entityKey];
+    } else {
+      this.currentShownEntities[entityKey] = update;
+    }
   }
 
   private parseEntityWidescan(lines: string[]) {
@@ -178,6 +192,43 @@ export class PacketParser {
       time: timestamp,
       pos,
     });
+
+    Object.keys(this.currentShownEntities).forEach(entityKey => {
+      if (!this.currentShownEntities[entityKey]) {
+        return;
+      }
+      const entityUpdate = this.currentShownEntities[entityKey];
+      if (
+        this.isOutOfRangeFromClient(entityUpdate.pos)
+        || (timestamp - entityUpdate.time > 15000 && this.isFarFromClient(entityUpdate.pos))
+      ) {
+        let entityPositions = this.zoneEntityUpdates[this.currentZoneId] = this.zoneEntityUpdates[this.currentZoneId] || {};
+        let list = entityPositions[entityKey] = entityPositions[entityKey] || [];
+        list.push({
+          kind: EntityUpdateKind.OutOfRange,
+          time: entityUpdate.time + 1000,
+        });
+        delete this.currentShownEntities[entityKey];
+      }
+    });
+  }
+
+  private isOutOfRangeFromClient(pos: Position): boolean {
+    if (!this.lastClientPosition) {
+      return false;
+    }
+    return this.calculateDistanceSquared(this.lastClientPosition, pos) > 2500; // Further than 50 yalms
+  }
+
+  private isFarFromClient(pos: Position): boolean {
+    if (!this.lastClientPosition) {
+      return false;
+    }
+    return this.calculateDistanceSquared(this.lastClientPosition, pos) > 2000; // Further than 45 yalms
+  }
+
+  private calculateDistanceSquared(pos1: Position, pos2: Position): number {
+    return Math.pow(pos1.x - pos2.x, 2) + Math.pow(pos1.y - pos2.y, 2) + Math.pow(pos1.z - pos2.z, 2);
   }
 
   private parseTimestamp(line: string) {

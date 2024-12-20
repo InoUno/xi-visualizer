@@ -11,3 +11,21 @@ export async function decompress(bytes) {
   );
   return await new Response(decompressedStream).arrayBuffer();
 }
+
+export function binarySearchLower<T, U>(arr: T[], value: U, valueExtract: (t: T) => U) {
+  let lo = 0;
+  let hi = arr.length - 1;
+  let mid = 0;
+  let extracted;
+  while (lo <= hi) {
+    mid = Math.floor((hi - lo) / 2) + lo;
+    extracted = valueExtract(arr[mid]);
+    if (extracted < value) {
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  return lo;
+}
