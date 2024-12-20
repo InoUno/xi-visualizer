@@ -67,6 +67,8 @@ export default function ZoneModel(props: ZoneDataProps) {
   const [entitySettings, setEntitySettings] = createStore<EntitiesSettings>();
   const [zoneMeshes, setZoneMeshes] = createStore<ByZone<THREE.Mesh>>();
 
+  const [getShowWidescan, setShowWidescan] = createSignal<boolean>(true);
+
   const [getShowDiscrete, setShowDiscrete] = createSignal<boolean>(false);
   const [getDiscreteLowerTime, setDiscreteLowerTime] = createSignal<number>(0);
   const [getDiscreteUpperTime, setDiscreteUpperTime] = createSignal<number>(1);
@@ -374,6 +376,13 @@ export default function ZoneModel(props: ZoneDataProps) {
         const update = updates[idx];
         if (update.kind !== EntityUpdateKind.Position && update.kind !== EntityUpdateKind.Widescan) {
           // Only add positional updates
+          idx++;
+          continue;
+        }
+
+        if (!getShowWidescan() && update.kind == EntityUpdateKind.Widescan) {
+          // Widescan is hidden
+          idx++;
           continue;
         }
 
@@ -711,6 +720,13 @@ export default function ZoneModel(props: ZoneDataProps) {
                   onClick={() => rows.forEach(v => setEntitySettings(v.entityKey, { hidden: true }))}
                 >
                   Hide filtered
+                </button>
+              ),
+              rows => (
+                <button
+                  onClick={() => setShowWidescan(!getShowWidescan())}
+                >
+                  {getShowWidescan() ? "Hide widescan" : "Show widescan"}
                 </button>
               ),
               zoneSelector,
