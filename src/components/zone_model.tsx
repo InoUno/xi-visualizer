@@ -57,6 +57,7 @@ interface EntityRow {
 
 interface NormalizedEntityUpdates {
   entityRows: EntityRow[];
+  maxUpdatesKey: string;
   firstTime: number;
   lastTime: number;
 }
@@ -71,7 +72,7 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   const [getShowWidescan, setShowWidescan] = createSignal<boolean>(true);
 
-  const [getShowDiscrete, setShowDiscrete] = createSignal<boolean>(false);
+  const [getShowDiscrete, setShowDiscrete] = createSignal<boolean>(true);
   const [getDiscreteLowerTime, setDiscreteLowerTime] = createSignal<number>(0);
   const [getDiscreteUpperTime, setDiscreteUpperTime] = createSignal<number>(1);
 
@@ -88,6 +89,9 @@ export default function ZoneModel(props: ZoneDataProps) {
       let firstTime = Number.MAX_SAFE_INTEGER;
       let lastTime = Number.MIN_SAFE_INTEGER;
 
+      let maxUpdatesKey;
+      let maxUpdates = Number.MIN_SAFE_INTEGER;
+
       let rows = Object.keys(props.entityUpdates[zoneId]).map(
         entityKey => {
           const updates: EntityUpdate[] = props.entityUpdates[zoneId][entityKey];
@@ -96,7 +100,16 @@ export default function ZoneModel(props: ZoneDataProps) {
           firstTime = Math.min(firstTime, updates[0].time);
           lastTime = Math.max(lastTime, updates[updates.length - 1].time);
 
-          setEntitySettings(entityKey, { hidden: true });
+          if (updates.length > maxUpdates) {
+            maxUpdates = updates.length;
+            if (maxUpdatesKey) {
+              setEntitySettings(maxUpdatesKey, { hidden: true });
+            }
+            maxUpdatesKey = entityKey;
+          } else {
+            setEntitySettings(entityKey, { hidden: true });
+          }
+
           const split = entityKey.split("-");
           return {
             id: split[1],
@@ -111,6 +124,7 @@ export default function ZoneModel(props: ZoneDataProps) {
         entityRows: rows,
         firstTime,
         lastTime,
+        maxUpdatesKey,
       };
     });
 
@@ -201,7 +215,7 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
   });
 
-  const [getShowAnimated, setShowAnimated] = createSignal<boolean>(true);
+  const [getShowAnimated, setShowAnimated] = createSignal<boolean>(false);
   const [isPlaying, setIsPlaying] = createSignal<boolean>(false);
   const [isSeeking, setIsSeeking] = createSignal<boolean>(false);
   const [getPlayTime, setPlayTime] = createSignal<number>(0);
@@ -449,6 +463,7 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   // Show/hide zone meshes and associated entities
   createEffect(() => {
+    const parsedUpdates = parsedEntityUpdates();
     for (const zoneId in zoneMeshes) {
       const zoneIsVisible = parseInt(zoneId) == getSelectedZone();
       zoneMeshes[zoneId].visible = zoneIsVisible;
@@ -458,7 +473,7 @@ export default function ZoneModel(props: ZoneDataProps) {
 
       // Show/hide entities from other zones
       for (const entityKey in props.entityUpdates[zoneId]) {
-        setEntitySettings(entityKey, { hidden: !zoneIsVisible });
+        setEntitySettings(entityKey, { hidden: !zoneIsVisible || (entityKey != parsedUpdates[zoneId].maxUpdatesKey) });
       }
       // if (zoneIsVisible) {
       //   fitCameraToContents(camera, fn => {
@@ -665,6 +680,30 @@ export default function ZoneModel(props: ZoneDataProps) {
         >
           <div class="flex flex-row my-2">
             <div class="m-auto h-full px-1 font-bold" style={{ "min-width": "6rem" }}>
+              Discrete:
+            </div>
+            <div class="px-1 m-auto h-full">
+              <button style={{ "min-width": "5rem" }} onClick={() => setShowDiscrete(!getShowDiscrete())}>
+                {getShowDiscrete() ? "Hide" : "Show"}
+              </button>
+            </div>
+            <div class="flex-grow">
+              <RangeInput
+                min={currentEntityUpdates().firstTime}
+                max={currentEntityUpdates().lastTime}
+                lower={getDiscreteLowerTime()}
+                upper={getDiscreteUpperTime()}
+                inputKind="timestamp"
+                onChangeLower={setDiscreteLowerTime}
+                onChangeUpper={setDiscreteUpperTime}
+                disabled={!getShowDiscrete()}
+              >
+              </RangeInput>
+            </div>
+          </div>
+
+          <div class="flex flex-row my-2">
+            <div class="m-auto h-full px-1 font-bold" style={{ "min-width": "6rem" }}>
               Animated:
             </div>
             <div class="m-auto h-full px-1">
@@ -704,29 +743,6 @@ export default function ZoneModel(props: ZoneDataProps) {
                 onInput={e => setPlayTime((parseInt(e.target.value) - currentEntityUpdates().firstTime) / 1000)}
               >
               </input>
-            </div>
-          </div>
-          <div class="flex flex-row my-2">
-            <div class="m-auto h-full px-1 font-bold" style={{ "min-width": "6rem" }}>
-              Discrete:
-            </div>
-            <div class="px-1 m-auto h-full">
-              <button style={{ "min-width": "5rem" }} onClick={() => setShowDiscrete(!getShowDiscrete())}>
-                {getShowDiscrete() ? "Hide" : "Show"}
-              </button>
-            </div>
-            <div class="flex-grow">
-              <RangeInput
-                min={currentEntityUpdates().firstTime}
-                max={currentEntityUpdates().lastTime}
-                lower={getDiscreteLowerTime()}
-                upper={getDiscreteUpperTime()}
-                inputKind="timestamp"
-                onChangeLower={setDiscreteLowerTime}
-                onChangeUpper={setDiscreteUpperTime}
-                disabled={!getShowDiscrete()}
-              >
-              </RangeInput>
             </div>
           </div>
 
