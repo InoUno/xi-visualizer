@@ -448,9 +448,7 @@ export default function ZoneModel(props: ZoneDataProps) {
   }
 
   onMount(() => {
-    window.addEventListener("resize", e => {
-      resizeCanvas();
-    });
+    window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
     adjustCameraAspect(camera, canvasElement);
 
@@ -474,6 +472,7 @@ export default function ZoneModel(props: ZoneDataProps) {
   });
 
   onCleanup(() => {
+    window.removeEventListener("resize", resizeCanvas);
     cleanupNode(scene);
     cleanUpZones(true);
     cleanUpEntities(true);
