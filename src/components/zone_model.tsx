@@ -441,10 +441,17 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   let hasMouseMovedSinceLast = false;
 
-  onMount(() => {
-    const parentRect = canvasElement.parentElement?.getBoundingClientRect();
+  function resizeCanvas() {
+    const parentRect = canvasElement.parentElement!.getBoundingClientRect();
     canvasElement.width = parentRect.width;
     canvasElement.height = parentRect.height;
+  }
+
+  onMount(() => {
+    window.addEventListener("resize", e => {
+      resizeCanvas();
+    });
+    resizeCanvas();
     adjustCameraAspect(camera, canvasElement);
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true, alpha: true });
@@ -601,8 +608,8 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   return (
     <div class="w-full h-full">
-      <div class="m-auto relative" style={{ "max-height": "60vh" }}>
-        <canvas class="block w-full" ref={canvasElement}></canvas>
+      <div class="m-auto relative" style={{ height: "60vh" }}>
+        <canvas class="block w-full h-full" ref={canvasElement}></canvas>
         <div
           class="absolute p-1 text-white bg-black pointer-events-none rounded font-mono opacity-70 text-sm"
           ref={labelElementRef}
