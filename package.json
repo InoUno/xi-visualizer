@@ -26,6 +26,7 @@
     "camera-controls": "^2.9.0",
     "fuse.js": "^7.0.0",
     "hold-event": "^1.1.0",
+    "solid-icons": "^1.1.0",
     "solid-js": "^1.9.3",
     "solid-three": "^0.2.0",
     "three": "^0.171.0",

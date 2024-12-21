@@ -17,6 +17,7 @@ import Table from "./table";
 
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
 import { binarySearchLower } from "../util";
+import AreaMenu, { Area } from "./area_menu";
 
 // Add the extension functions
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -519,8 +520,41 @@ export default function ZoneModel(props: ZoneDataProps) {
       screenMouse.y = event.offsetY;
       hasMouseMovedSinceLast = true;
     });
+
     canvasElement.addEventListener("mouseout", event => {
       labelElementRef.style.display = "none";
+    });
+
+    canvasElement.addEventListener("click", event => {
+      if (!event.shiftKey || !event.ctrlKey) {
+        return;
+      }
+
+      const pos = castRayOntoMesh();
+      if (!pos) {
+        return;
+      }
+
+      // Add a new polygon if none is selected
+      if (getCurrentAreaIdx() == undefined) {
+        setAreas(areas.length, { y: 0, polygon: [] });
+        setCurrentAreaIdx(areas.length - 1);
+      }
+
+      const area = areas[getCurrentAreaIdx()];
+      const polygon = area.polygon;
+      if (polygon.length == 0 && area.y == 0) {
+        // Update y if it's default and there's no vertices
+        setAreas(getCurrentAreaIdx(), "y", Math.round(-pos.y));
+      }
+
+      // Add the new vertex
+      setAreas(
+        getCurrentAreaIdx(),
+        "polygon",
+        polygon.length,
+        { x: Math.round(pos.x), z: Math.round(-pos.z) },
+      );
     });
 
     controls = addMapControls(camera, canvasElement);
@@ -575,17 +609,23 @@ export default function ZoneModel(props: ZoneDataProps) {
   const cameraMouse = new THREE.Vector2(1, 1);
   const screenMouse = new THREE.Vector2(1, 1);
 
-  function castRay() {
-    raycaster.setFromCamera(cameraMouse, camera);
-    const intersections = raycaster.intersectObjects([zoneMeshes[getSelectedZone()]]);
-    if (intersections.length > 0) {
-      const intersection = intersections[0];
-      labelElementRef.textContent = `${intersection.point.x.toFixed(1)}, ${(intersection.point.y * -1).toFixed(1)}, ${(intersection.point.z * -1).toFixed(1)}`;
+  function updatePosLabel() {
+    const position = castRayOntoMesh();
+    if (position) {
+      labelElementRef.textContent = `${position.x.toFixed(1)}, ${(position.y * -1).toFixed(1)}, ${(position.z * -1).toFixed(1)}`;
       labelElementRef.style.left = `${screenMouse.x + 20}px`;
       labelElementRef.style.top = `${screenMouse.y - 20}px`;
       labelElementRef.style.display = "block";
     } else {
       labelElementRef.style.display = "none";
+    }
+  }
+
+  function castRayOntoMesh(): Position | undefined {
+    raycaster.setFromCamera(cameraMouse, camera);
+    const intersections = raycaster.intersectObjects([zoneMeshes[getSelectedZone()]]);
+    if (intersections.length > 0) {
+      return { x: intersections[0].point.x, y: intersections[0].point.y, z: intersections[0].point.z };
     }
   }
 
@@ -601,7 +641,7 @@ export default function ZoneModel(props: ZoneDataProps) {
 
     if (hasMouseMovedSinceLast) {
       hasMouseMovedSinceLast = false;
-      castRay();
+      updatePosLabel();
     }
 
     if (isPlaying()) {
@@ -647,6 +687,40 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
   });
 
+  const [areas, setAreas] = createStore<Area[]>([]);
+  const [getCurrentAreaIdx, setCurrentAreaIdx] = createSignal<number | undefined>();
+
+  // Draw areas
+  createEffect(() => {
+    let meshes = [];
+
+    for (const area of areas) {
+      if (area.polygon.length < 3) {
+        continue;
+      }
+
+      const shape = new THREE.Shape(area.polygon.map(p => {
+        return new THREE.Vector2(p.x, p.z);
+      }));
+      const geo = new THREE.ExtrudeGeometry(shape, { depth: 20, bevelEnabled: false });
+      geo.rotateX(Math.PI / 2);
+      geo.translate(0, -area.y + 10, 0);
+
+      const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.2, color: 0xFFAA00 });
+      const mesh = new THREE.Mesh(geo, mat);
+
+      meshes.push(mesh);
+      scene.add(mesh);
+    }
+
+    onCleanup(() => {
+      for (const mesh of meshes) {
+        cleanupNode(mesh);
+        scene.remove(mesh);
+      }
+    });
+  });
+
   const zoneSelector = (
     <Show when={Object.keys(props.zoneData).length > 1}>
       <div class="flex-grow m-1">
@@ -665,7 +739,15 @@ export default function ZoneModel(props: ZoneDataProps) {
   return (
     <div class="w-full h-full">
       <div class="m-auto relative" style={{ height: "60vh" }}>
-        <canvas class="block w-full h-full" ref={canvasElement}></canvas>
+        <canvas class="block w-full h-full" ref={canvasElement}>
+        </canvas>
+        <AreaMenu
+          areas={areas}
+          setAreas={setAreas}
+          currentAreaIdx={getCurrentAreaIdx()}
+          setCurrentArea={setCurrentAreaIdx}
+        >
+        </AreaMenu>
         <div
           class="absolute p-1 text-white bg-black pointer-events-none rounded font-mono opacity-70 text-sm"
           ref={labelElementRef}

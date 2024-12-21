@@ -10,4 +10,7 @@ export default defineConfig({
     target: "esnext",
   },
   base: "/xi-visualizer",
+  optimizeDeps: {
+    exclude: ["solid-icons"], // To prevent "React is undefined" error
+  },
 });
