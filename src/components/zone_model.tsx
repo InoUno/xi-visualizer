@@ -52,6 +52,7 @@ interface EntityRow {
   id: string;
   index: string;
   entityKey: string;
+  name: string;
   updateCount: number;
 }
 
@@ -112,11 +113,20 @@ export default function ZoneModel(props: ZoneDataProps) {
             setEntitySettings(entityKey, { hidden: true });
           }
 
+          let name = "";
+          for (const update of updates) {
+            if ("name" in update) {
+              name = update.name;
+              break;
+            }
+          }
+
           const split = entityKey.split("-");
           return {
             id: split[1],
             index: split[0],
             entityKey,
+            name,
             updateCount,
           };
         },
@@ -990,6 +1000,7 @@ export default function ZoneModel(props: ZoneDataProps) {
           <Table
             inputRows={currentEntityUpdates().entityRows}
             columns={[
+              { name: "Name", key: "name" },
               { name: "ID", key: "id" },
               { name: "Index", key: "index" },
               { name: "Count", key: "updateCount" },

@@ -24,6 +24,7 @@ export const enum EntityUpdateKind {
 export interface PositionUpdate extends BaseEntityUpdate {
   kind: EntityUpdateKind.Position | EntityUpdateKind.Widescan;
   pos: Position;
+  name?: string;
 }
 
 export interface OutOfRangeUpdate extends BaseEntityUpdate {
@@ -43,6 +44,8 @@ type EntityUpdates = {
 export type ZoneEntityUpdates = {
   [zoneId: number]: EntityUpdates;
 };
+
+const enc = new TextDecoder("utf-8");
 
 export class PacketParser {
   private lines: string[];
@@ -114,7 +117,8 @@ export class PacketParser {
   }
 
   private parseEntityUpdate(lines: string[]) {
-    const hasPosition = (this.extractByte(lines, 0x0A) & 1) == 1;
+    const updateMask = this.extractByte(lines, 0x0A);
+    const hasPosition = (updateMask & 0x01) > 0;
     if (!hasPosition) {
       // Skip packets without positions
       return;
@@ -127,6 +131,8 @@ export class PacketParser {
     const entityIndex = this.extractU16(lines, 0x08);
     const entityKey = `0x${entityIndex.toString(16).toUpperCase().padStart(3, "0")}-${entityId}`;
 
+    const name = (updateMask & 0x08) > 0 ? this.extractString(lines, 0x34) : undefined;
+
     const timestamp = this.parseTimestamp(lines[0]);
     const pos = this.extractPosition(lines, 0x0C);
 
@@ -136,6 +142,7 @@ export class PacketParser {
       kind: EntityUpdateKind.Position as EntityUpdateKind.Position,
       time: timestamp,
       pos,
+      name,
     };
     list.push(update);
 
@@ -161,6 +168,8 @@ export class PacketParser {
     const entityId = ((0x1000 + this.currentZoneId) << 12) + entityIndex;
     const entityKey = `0x${entityIndex.toString(16).toUpperCase().padStart(3, "0")}-${entityId}`;
 
+    const name = this.extractString(lines, 0x0C);
+
     const timestamp = this.parseTimestamp(lines[0]);
     const xOffset = this.extractI16(lines, 0x08);
     const zOffset = this.extractI16(lines, 0x0A);
@@ -177,6 +186,7 @@ export class PacketParser {
       kind: EntityUpdateKind.Widescan,
       time: timestamp,
       pos,
+      name,
     });
   }
 
@@ -243,6 +253,18 @@ export class PacketParser {
       y: dv.getFloat32(4, true),
       z: dv.getFloat32(8, true),
     };
+  }
+
+  private extractString(lines: string[], offset: number, maxLen: number = 16): string {
+    const bytes = this.extractBytes(lines, offset, maxLen);
+    const arr = new Uint8Array(bytes);
+    let end = 0;
+    for (; end < maxLen; end++) {
+      if (arr[end] == 0) {
+        break;
+      }
+    }
+    return enc.decode(bytes.slice(0, end));
   }
 
   private extractU32(lines: string[], offset: number): number {
