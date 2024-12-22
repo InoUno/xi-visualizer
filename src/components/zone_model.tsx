@@ -1,8 +1,9 @@
-import * as THREE from "three";
-// import "../graphics/bvh";
 import CameraControls from "camera-controls";
+import { IoHelpCircle } from "solid-icons/io";
 import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from "solid-js";
-import { createStore } from "solid-js/store";
+import { createStore, produce } from "solid-js/store";
+import * as THREE from "three";
+import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
 import Stats from "three/addons/libs/stats.module.js";
 import { FlyControls, MapControls } from "three/examples/jsm/Addons.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
@@ -11,13 +12,11 @@ import { setupBaseScene } from "../graphics/scene";
 import { cleanupNode } from "../graphics/util";
 import { EntityUpdate, EntityUpdateKind, Position, PositionUpdate, ZoneEntityUpdates } from "../parse_packets";
 import { ByZone } from "../types";
+import { binarySearchLower } from "../util";
+import AreaMenu, { Area, Point } from "./area_menu";
 import LookupInput from "./lookup_input";
 import RangeInput from "./range_input";
 import Table from "./table";
-
-import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
-import { binarySearchLower } from "../util";
-import AreaMenu, { Area } from "./area_menu";
 
 // Add the extension functions
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -64,6 +63,8 @@ interface NormalizedEntityUpdates {
 }
 
 export default function ZoneModel(props: ZoneDataProps) {
+  const [getShowHelp, setShowHelp] = createSignal<boolean>(false);
+
   const zoneIds = Object.keys(props.zoneData);
   const startingZoneId = zoneIds[0] != "0" ? parseInt(zoneIds[0]) : (parseInt(zoneIds[1]) || 0);
   const [getSelectedZone, setSelectedZone] = createSignal<number>(startingZoneId);
@@ -495,22 +496,21 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   let controls: CameraControls | FlyControls | MapControls;
   let canvasElement: HTMLCanvasElement;
-  let labelElementRef: HTMLDivElement;
+  let labelRendererElement: HTMLDivElement;
+  let coordLabelRef: HTMLDivElement;
 
   let hasMouseMovedSinceLast = false;
 
+  const [getNeedsResize, setNeedsResize] = createSignal<boolean>(true);
   function resizeCanvas() {
     const parentRect = canvasElement.parentElement!.getBoundingClientRect();
     canvasElement.width = parentRect.width;
     canvasElement.height = parentRect.height;
+    setNeedsResize(true);
   }
 
   onMount(() => {
     window.addEventListener("resize", resizeCanvas);
-    resizeCanvas();
-    adjustCameraAspect(camera, canvasElement);
-
-    const renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true, alpha: true });
 
     canvasElement.addEventListener("mousemove", event => {
       const canvas = canvasElement;
@@ -522,11 +522,11 @@ export default function ZoneModel(props: ZoneDataProps) {
     });
 
     canvasElement.addEventListener("mouseout", event => {
-      labelElementRef.style.display = "none";
+      coordLabelRef.style.display = "none";
     });
 
     canvasElement.addEventListener("click", event => {
-      if (!event.shiftKey || !event.ctrlKey) {
+      if (!event.ctrlKey) {
         return;
       }
 
@@ -535,31 +535,52 @@ export default function ZoneModel(props: ZoneDataProps) {
         return;
       }
 
+      setShowAreaDetails(true);
+
       // Add a new polygon if none is selected
-      if (getCurrentAreaIdx() == undefined) {
+      if (getSelectedAreaIdx() == undefined) {
         setAreas(areas.length, { y: 0, polygon: [] });
-        setCurrentAreaIdx(areas.length - 1);
+        setSelectedAreaIdx(areas.length - 1);
       }
 
-      const area = areas[getCurrentAreaIdx()];
+      const area = areas[getSelectedAreaIdx()];
       const polygon = area.polygon;
       if (polygon.length == 0 && area.y == 0) {
         // Update y if it's default and there's no vertices
-        setAreas(getCurrentAreaIdx(), "y", Math.round(-pos.y));
+        setAreas(getSelectedAreaIdx(), "y", Math.round(-pos.y));
       }
 
-      // Add the new vertex
-      setAreas(
-        getCurrentAreaIdx(),
-        "polygon",
-        polygon.length,
-        { x: Math.round(pos.x), z: Math.round(-pos.z) },
-      );
+      const newVertex = { x: Math.round(pos.x), z: Math.round(-pos.z) };
+
+      if (getSelectedVertexIdx() !== undefined) {
+        // If there's a selected vertex, add the new vertex right after it
+        setAreas(
+          getSelectedAreaIdx(),
+          "polygon",
+          produce<Point[]>(vertices => {
+            vertices.splice(getSelectedVertexIdx() + 1, 0, newVertex);
+            return vertices;
+          }),
+        );
+        setSelectedVertexIdx(getSelectedVertexIdx() + 1);
+      } else {
+        // Else just add the new vertex at the end
+        setAreas(
+          getSelectedAreaIdx(),
+          "polygon",
+          polygon.length,
+          newVertex,
+        );
+        setSelectedVertexIdx(polygon.length - 1);
+      }
     });
 
     controls = addMapControls(camera, canvasElement);
 
-    renderer.setAnimationLoop(() => animate(renderer));
+    const renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true, alpha: true });
+    const labelRenderer = new CSS2DRenderer({ element: labelRendererElement });
+
+    renderer.setAnimationLoop(() => animate(renderer, labelRenderer));
   });
 
   onCleanup(() => {
@@ -612,12 +633,12 @@ export default function ZoneModel(props: ZoneDataProps) {
   function updatePosLabel() {
     const position = castRayOntoMesh();
     if (position) {
-      labelElementRef.textContent = `${position.x.toFixed(1)}, ${(position.y * -1).toFixed(1)}, ${(position.z * -1).toFixed(1)}`;
-      labelElementRef.style.left = `${screenMouse.x + 20}px`;
-      labelElementRef.style.top = `${screenMouse.y - 20}px`;
-      labelElementRef.style.display = "block";
+      coordLabelRef.textContent = `${position.x.toFixed(1)}, ${(position.y * -1).toFixed(1)}, ${(position.z * -1).toFixed(1)}`;
+      coordLabelRef.style.left = `${screenMouse.x + 20}px`;
+      coordLabelRef.style.top = `${screenMouse.y - 20}px`;
+      coordLabelRef.style.display = "block";
     } else {
-      labelElementRef.style.display = "none";
+      coordLabelRef.style.display = "none";
     }
   }
 
@@ -629,14 +650,20 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
   }
 
-  function animate(renderer: THREE.WebGLRenderer) {
+  function animate(renderer: THREE.WebGLRenderer, labelRenderer: CSS2DRenderer) {
     stats.update();
 
     const delta = clock.getDelta();
     controls?.update(delta);
 
-    if (resizeRendererToDisplaySize(renderer)) {
+    if (getNeedsResize()) {
+      const canvas = canvasElement;
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      renderer.setSize(width, height, false);
+      labelRenderer.setSize(width, height);
       adjustCameraAspect(camera, canvasElement);
+      setNeedsResize(false);
     }
 
     if (hasMouseMovedSinceLast) {
@@ -651,8 +678,8 @@ export default function ZoneModel(props: ZoneDataProps) {
       }
     }
 
-    renderer.clear();
     renderer.render(scene, camera);
+    labelRenderer.render(scene, camera);
   }
 
   createEffect(() => {
@@ -660,19 +687,6 @@ export default function ZoneModel(props: ZoneDataProps) {
       mixer.setTime(getPlayTime());
     }
   });
-
-  function resizeRendererToDisplaySize(renderer: THREE.WebGLRenderer) {
-    const canvas = canvasElement;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    const needResize = canvas.width !== width || canvas.height !== height;
-    if (needResize) {
-      renderer.setSize(width, height, false);
-      // labelRenderer.setSize(width, height);
-      // labelRenderer.domElement.style.top = `calc(${canvas.offsetTop}px - 1.5rem)`;
-    }
-    return needResize;
-  }
 
   const currentEntityUpdates = createMemo(() => {
     const key = getSelectedZone();
@@ -688,13 +702,16 @@ export default function ZoneModel(props: ZoneDataProps) {
   });
 
   const [areas, setAreas] = createStore<Area[]>([]);
-  const [getCurrentAreaIdx, setCurrentAreaIdx] = createSignal<number | undefined>();
+  const [getSelectedAreaIdx, setSelectedAreaIdx] = createSignal<number | undefined>();
+  const [getSelectedVertexIdx, setSelectedVertexIdx] = createSignal<number | undefined>();
+  const [getShowAreaDetails, setShowAreaDetails] = createSignal<boolean>(false);
 
   // Draw areas
   createEffect(() => {
     let meshes = [];
 
-    for (const area of areas) {
+    for (let i = 0; i < areas.length; i++) {
+      const area = areas[i];
       if (area.polygon.length < 3) {
         continue;
       }
@@ -706,7 +723,12 @@ export default function ZoneModel(props: ZoneDataProps) {
       geo.rotateX(Math.PI / 2);
       geo.translate(0, -area.y + 10, 0);
 
-      const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.2, color: 0xFFAA00 });
+      let mat;
+      if (getSelectedAreaIdx() == i) {
+        mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6, color: 0xFCF63C, depthWrite: false });
+      } else {
+        mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.5, color: 0xFCAA58, depthWrite: false });
+      }
       const mesh = new THREE.Mesh(geo, mat);
 
       meshes.push(mesh);
@@ -714,6 +736,60 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
 
     onCleanup(() => {
+      for (const mesh of meshes) {
+        cleanupNode(mesh);
+        scene.remove(mesh);
+      }
+    });
+  });
+
+  // Draw current area handles
+  createEffect(() => {
+    if (getSelectedAreaIdx() === undefined) {
+      return;
+    }
+
+    const area = areas[getSelectedAreaIdx()];
+
+    let meshes: THREE.Mesh[] = [];
+
+    let elements: Element[] = [];
+    let labels: CSS2DObject[] = [];
+
+    for (let i = 0; i < area.polygon.length; i++) {
+      const pos = area.polygon[i];
+      const geo = new THREE.SphereGeometry(1);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xFF7F00 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(pos.x, -area.y + 10, pos.z);
+
+      const div = document.createElement("div");
+      div.textContent = String.fromCharCode("A".charCodeAt(0) + i);
+      div.className = "vertex-label noselect pointer-events-auto cursor-pointer text-sm font-mono";
+      div.onclick = () => {
+        setSelectedVertexIdx(i);
+      };
+      elements.push(div);
+
+      mesh.layers.enableAll();
+
+      const label = new CSS2DObject(div);
+      label.position.set(0, 5, 0);
+      mesh.add(label);
+      label.layers.set(0);
+      labels.push(label);
+
+      meshes.push(mesh);
+      scene.add(mesh);
+    }
+
+    onCleanup(() => {
+      for (const label of labels) {
+        cleanupNode(label);
+      }
+      for (const el of elements) {
+        el.remove();
+      }
       for (const mesh of meshes) {
         cleanupNode(mesh);
         scene.remove(mesh);
@@ -742,18 +818,66 @@ export default function ZoneModel(props: ZoneDataProps) {
         <canvas class="block w-full h-full" ref={canvasElement}>
         </canvas>
         <AreaMenu
+          showDetails={getShowAreaDetails()}
+          setShowDetails={setShowAreaDetails}
           areas={areas}
           setAreas={setAreas}
-          currentAreaIdx={getCurrentAreaIdx()}
-          setCurrentArea={setCurrentAreaIdx}
+          selectedAreaIdx={getSelectedAreaIdx()}
+          setSelectedArea={setSelectedAreaIdx}
+          selectedVertexIdx={getSelectedVertexIdx()}
+          setSelectedVertex={setSelectedVertexIdx}
         >
         </AreaMenu>
         <div
-          class="absolute p-1 text-white bg-black pointer-events-none rounded font-mono opacity-70 text-sm"
-          ref={labelElementRef}
+          class="absolute hidden p-1 text-white bg-black pointer-events-none rounded font-mono opacity-70 text-sm noselect"
+          ref={coordLabelRef}
         >
         </div>
-        {import.meta.env.DEV ? stats.dom : undefined}
+        <div
+          class="absolute top-0 pointer-events-none"
+          ref={labelRendererElement}
+        >
+        </div>
+
+        {/* Helper menu */}
+        <div class="absolute top-0 left-0 pointer-events-none h-full flex flex-col-reverse" style={{ width: "40%" }}>
+          <Show
+            when={getShowHelp()}
+            fallback={
+              <div class="pointer-events-auto cursor-pointer p-1" onClick={() => setShowHelp(true)}>
+                <IoHelpCircle size={20} title="Mouse and keyboard help"></IoHelpCircle>
+              </div>
+            }
+          >
+            {import.meta.env.DEV ? stats.dom : undefined}
+            <div class="pointer-events-auto cursor-pointer bg-black bg-opacity-80 p-2 rounded-tr text-sm" onClick={() => setShowHelp(false)}>
+              Click this to hide it again.
+              <ul class="list-disc list-inside">
+                <li>
+                  <b>Move/rotate camera:</b> Left/right-click and drag
+                </li>
+                <li>
+                  <b>Area editing:</b> Most of the contents of the Area Manager can be clicked/edited.
+                </li>
+                <li>
+                  <b>Add a new area node:</b> CTRL + left-click. If an existing node is selected, the new one will be inserted after it.
+                </li>
+                <li>
+                  <b>Select a node:</b> Select a node by either clicking it in the world, or on it in the Area Manager.
+                </li>
+                <li>
+                  <b>Move a node:</b> Select the node, then hold SHIFT + arrow keys to move it along the X- and/or Z-axis. Or edit the coordinates directly.
+                </li>
+                <li>
+                  <b>Area to Lua:</b> Click the copy button next to an area in the Area Manager to get Lua code defining it into your clipboard.
+                </li>
+                <li>
+                  <b>Lua to areas:</b> Paste text containing Lua code that defines the areas (i.e. a zone Setup.lua file)
+                </li>
+              </ul>
+            </div>
+          </Show>
+        </div>
       </div>
       <Show when={props.entityUpdates}>
         <Show

@@ -78,7 +78,6 @@ export class PacketParser {
         packetCount++;
       }
     }
-    console.log(this);
     console.timeEnd("parse-packets");
   }
 
@@ -153,7 +152,8 @@ export class PacketParser {
 
   private parseEntityWidescan(lines: string[]) {
     if (!this.lastClientPosition) {
-      console.log("Got a widescan result before client position was known.");
+      // Skip widescan results before the latest client position is known,
+      // because widescan results are relative to it.
       return;
     }
 
