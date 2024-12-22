@@ -766,9 +766,13 @@ export default function ZoneModel(props: ZoneDataProps) {
       const div = document.createElement("div");
       div.textContent = String.fromCharCode("A".charCodeAt(0) + i);
       div.className = "vertex-label noselect pointer-events-auto cursor-pointer text-sm font-mono";
-      div.onclick = () => {
-        setSelectedVertexIdx(i);
-      };
+      if (getSelectedVertexIdx() == i) {
+        div.className += " font-bold bg-blue-800 underline";
+      } else {
+        div.onclick = () => {
+          setSelectedVertexIdx(i);
+        };
+      }
       elements.push(div);
 
       mesh.layers.enableAll();
