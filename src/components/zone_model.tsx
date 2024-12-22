@@ -905,13 +905,17 @@ export default function ZoneModel(props: ZoneDataProps) {
                   <b>Area editing:</b> Most of the contents of the Area Manager can be clicked/edited.
                 </li>
                 <li>
-                  <b>Add a new area node:</b> CTRL + left-click. If an existing node is selected, the new one will be inserted after it.
+                  <b>Add a new area node:</b>{" "}
+                  CTRL + left-click. If an existing node is selected, the new one will be inserted after it. While having a node selected, you can also press
+                  SHIFT + N to create a copy.
                 </li>
                 <li>
                   <b>Select a node:</b> Select a node by either clicking it in the world, or on it in the Area Manager.
                 </li>
                 <li>
-                  <b>Move a node:</b> Select the node, then hold SHIFT + arrow keys to move it along the X- and/or Z-axis. Or edit the coordinates directly.
+                  <b>Move a node:</b>{" "}
+                  Select the node, then hold SHIFT + arrow keys to move it along the X- and/or Z-axis. Hold CTRL to move it faster. The coordinates can also be
+                  edited directly in the Area Manager.
                 </li>
                 <li>
                   <b>Area to Lua:</b> Click the copy button next to an area in the Area Manager to get Lua code defining it into your clipboard.

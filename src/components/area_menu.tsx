@@ -68,6 +68,7 @@ export default function AreaMenu(ps: AreaMenuProps) {
       polygon.length,
       newVertex,
     );
+    ps.setSelectedVertex(polygon.length - 1);
   };
 
   const moveVertex = (index: number, moveDown: boolean) => {
@@ -96,7 +97,7 @@ export default function AreaMenu(ps: AreaMenuProps) {
   };
 
   const deleteVertex = (index: number) => {
-    if (ps.selectedVertexIdx == index) {
+    if (ps.selectedVertexIdx == index && index == ps.areas[ps.selectedAreaIdx].polygon.length - 1) {
       ps.setSelectedVertex(undefined);
     }
     ps.setAreas(
@@ -167,6 +168,8 @@ export default function AreaMenu(ps: AreaMenuProps) {
       }
       return;
     }
+
+    // Remaining actions require Shift to be held and a selected vertex
     if (!e.shiftKey || ps.selectedVertexIdx === undefined) {
       return;
     }
@@ -176,20 +179,23 @@ export default function AreaMenu(ps: AreaMenuProps) {
       return;
     }
 
+    const diff = e.ctrlKey ? 5 : 1;
     switch (e.key) {
       case "ArrowLeft":
-        ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "x", x => x - 1);
+        ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "x", x => x - diff);
         break;
       case "ArrowRight":
-        ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "x", x => x + 1);
+        ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "x", x => x + diff);
         break;
       case "ArrowUp":
-        ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "z", z => z + 1);
+        ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "z", z => z + diff);
         break;
       case "ArrowDown":
-        ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "z", z => z - 1);
+        ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "z", z => z - diff);
         break;
-      case "Escape":
+      case "N":
+        addNewVertex();
+        break;
       default:
         return;
     }
