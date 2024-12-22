@@ -708,7 +708,9 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   // Draw areas
   createEffect(() => {
-    let meshes = [];
+    let meshes: THREE.Mesh[] = [];
+    let elements: Element[] = [];
+    let labels: CSS2DObject[] = [];
 
     for (let i = 0; i < areas.length; i++) {
       const area = areas[i];
@@ -722,6 +724,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       const geo = new THREE.ExtrudeGeometry(shape, { depth: 20, bevelEnabled: false });
       geo.rotateX(Math.PI / 2);
       geo.translate(0, -area.y + 10, 0);
+      geo.computeBoundingBox();
 
       let mat;
       if (getSelectedAreaIdx() == i) {
@@ -731,11 +734,40 @@ export default function ZoneModel(props: ZoneDataProps) {
       }
       const mesh = new THREE.Mesh(geo, mat);
 
+      mesh.layers.enableAll();
+
+      if (getSelectedAreaIdx() !== i) {
+        const div = document.createElement("div");
+        div.textContent = `Area #${i + 1}`;
+        div.className = "vertex-label noselect pointer-events-auto cursor-pointer text-sm font-mono";
+        div.onclick = () => {
+          setSelectedAreaIdx(i);
+        };
+        elements.push(div);
+
+        const label = new CSS2DObject(div);
+        const box = geo.boundingBox;
+        label.position.set(
+          box.min.x + (box.max.x - box.min.x) / 2,
+          box.min.y + (box.max.y - box.min.y) / 2 + 5,
+          box.min.z + (box.max.z - box.min.z) / 2,
+        );
+        mesh.add(label);
+        label.layers.set(0);
+        labels.push(label);
+      }
+
       meshes.push(mesh);
       scene.add(mesh);
     }
 
     onCleanup(() => {
+      for (const label of labels) {
+        cleanupNode(label);
+      }
+      for (const el of elements) {
+        el.remove();
+      }
       for (const mesh of meshes) {
         cleanupNode(mesh);
         scene.remove(mesh);
@@ -752,7 +784,6 @@ export default function ZoneModel(props: ZoneDataProps) {
     const area = areas[getSelectedAreaIdx()];
 
     let meshes: THREE.Mesh[] = [];
-
     let elements: Element[] = [];
     let labels: CSS2DObject[] = [];
 
@@ -762,6 +793,8 @@ export default function ZoneModel(props: ZoneDataProps) {
       const mat = new THREE.MeshBasicMaterial({ color: 0xFF7F00 });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(pos.x, -area.y + 10, pos.z);
+
+      mesh.layers.enableAll();
 
       const div = document.createElement("div");
       div.textContent = String.fromCharCode("A".charCodeAt(0) + i);
@@ -774,8 +807,6 @@ export default function ZoneModel(props: ZoneDataProps) {
         };
       }
       elements.push(div);
-
-      mesh.layers.enableAll();
 
       const label = new CSS2DObject(div);
       label.position.set(0, 5, 0);

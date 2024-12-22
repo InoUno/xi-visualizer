@@ -159,6 +159,14 @@ export default function AreaMenu(ps: AreaMenuProps) {
   };
 
   function handleKeyDown(e: KeyboardEvent) {
+    if (e.key == "Escape") {
+      if (ps.selectedVertexIdx) {
+        ps.setSelectedVertex(undefined);
+      } else if (ps.selectedAreaIdx) {
+        ps.setSelectedArea(undefined);
+      }
+      return;
+    }
     if (!e.shiftKey || ps.selectedVertexIdx === undefined) {
       return;
     }
@@ -181,6 +189,7 @@ export default function AreaMenu(ps: AreaMenuProps) {
       case "ArrowDown":
         ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "z", z => z - 1);
         break;
+      case "Escape":
       default:
         return;
     }
@@ -260,10 +269,18 @@ export default function AreaMenu(ps: AreaMenuProps) {
                 <ul class="font-mono">
                   <For each={selectedArea()?.polygon}>
                     {(item, index) => (
-                      <li class="cursor-pointer" onClick={() => ps.setSelectedVertex(index())}>
+                      <li
+                        class="cursor-pointer"
+                        classList={{ "text-yellow-300": ps.selectedVertexIdx == index() }}
+                        onClick={() => ps.setSelectedVertex(index())}
+                      >
                         <span>
-                          <span>{String.fromCharCode("A".charCodeAt(0) + index())}:</span>
-                          (<span
+                          <span
+                            classList={{ underline: ps.selectedVertexIdx == index() }}
+                          >
+                            {String.fromCharCode("A".charCodeAt(0) + index())}
+                          </span>
+                          : (<span
                             contentEditable={true}
                             class="p-1 text-lime-300 cursor-text"
                             onFocusOut={e => setCoordX(index(), e.target)}
@@ -279,7 +296,7 @@ export default function AreaMenu(ps: AreaMenuProps) {
                           </span>)
                         </span>
                         <Show when={ps.selectedVertexIdx == index()}>
-                          <span class="text-yellow-300 ml-1">
+                          <span class="ml-1">
                             <IoLocate
                               class="inline-block"
                               title="Hold shift and use arrow keys to move the point"
