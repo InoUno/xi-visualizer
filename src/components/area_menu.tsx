@@ -160,9 +160,9 @@ export default function AreaMenu(ps: AreaMenuProps) {
 
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key == "Escape") {
-      if (ps.selectedVertexIdx) {
+      if (ps.selectedVertexIdx !== undefined) {
         ps.setSelectedVertex(undefined);
-      } else if (ps.selectedAreaIdx) {
+      } else if (ps.selectedAreaIdx !== undefined) {
         ps.setSelectedArea(undefined);
       }
       return;
