@@ -206,7 +206,7 @@ export default function AreaMenu(ps: AreaMenuProps) {
   });
 
   return (
-    <div class="h-full absolute right-0 top-0 overflow-y-auto m-0 p-0 pointer-events-none noselect" style={{ "width": "20%", "min-width": "12rem" }}>
+    <div class="h-full absolute right-0 top-0 overflow-y-auto m-0 p-0 pointer-events-none noselect z-50" style={{ "width": "20%", "min-width": "12rem" }}>
       <div class="w-full bg-black bg-opacity-90 m-0 rounded-sm  pointer-events-auto">
         {/* Details expand */}
         <div onClick={() => ps.setShowDetails(!ps.showDetails)} class="cursor-pointer px-2 py-1 font-bold">
