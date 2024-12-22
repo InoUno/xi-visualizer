@@ -219,7 +219,7 @@ export default function AreaMenu(ps: AreaMenuProps) {
             <div style={{ height: "50%" }} class="border-t border-t-white p-2">
               <div class="flex flex-row font-semibold">
                 <span class="flex-grow">
-                  Editing: <span class="text-yellow-300">Area #{ps.selectedAreaIdx + 1}</span>
+                  Editing: <span class="text-yellow-300">Area {ps.selectedAreaIdx + 1}</span>
                   <Show
                     when={copyTimers[ps.selectedAreaIdx] === undefined}
                     fallback={<IoCheckmarkDoneSharp size={18} class="font-bold inline-block ml-2 text-green-300"></IoCheckmarkDoneSharp>}
@@ -342,7 +342,7 @@ export default function AreaMenu(ps: AreaMenuProps) {
                       class="text-blue-300 cursor-pointer hover:underline font-mono flex-grow"
                       onClick={() => ps.setSelectedArea(index())}
                     >
-                      Area #{index() + 1}
+                      Area {index() + 1}
                     </span>
                     <span class="cursor-pointer px-1 align-bottom text-red-300 font-mono" onClick={() => deleteArea(index())}>
                       <IoTrash class="inline-block"></IoTrash>

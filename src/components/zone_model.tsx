@@ -738,7 +738,7 @@ export default function ZoneModel(props: ZoneDataProps) {
 
       if (getSelectedAreaIdx() !== i) {
         const div = document.createElement("div");
-        div.textContent = `Area #${i + 1}`;
+        div.textContent = `Area ${i + 1}`;
         div.className = "vertex-label noselect pointer-events-auto cursor-pointer text-sm font-mono";
         div.onclick = () => {
           setSelectedAreaIdx(i);
