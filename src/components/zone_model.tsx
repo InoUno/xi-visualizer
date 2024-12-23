@@ -161,40 +161,23 @@ export default function ZoneModel(props: ZoneDataProps) {
       const color = new THREE.Color();
       color.setRGB(0.2, 0.2, 0.2);
 
-      let triangleCount = new Uint32Array(buffer, 0, 1)[0];
-      const normalsSize = triangleCount * 3;
-      const positionsSize = triangleCount * 3 * 3;
-      const positions = new Float32Array(buffer, 4, positionsSize);
-      const normalsDedupe = new Float32Array(
-        buffer,
-        4 + positionsSize * 4,
-        normalsSize,
-      );
+      const header = new Uint32Array(buffer, 0, 2);
+      const triangleCount = header[0];
+      const vertexCount = header[1];
+      const vertices = new Float32Array(buffer, 8, vertexCount * 3);
+      const indices = new Uint32Array(buffer, 8 + vertexCount * 3 * 4, triangleCount * 3);
 
-      const colors = new Uint8Array(positionsSize);
-      for (let i = 0; i < positionsSize; i += 3) {
+      const colors = new Uint8Array(vertexCount * 3);
+      for (let i = 0; i < vertexCount * 3; i += 3) {
         colors.set([color.r * 255, color.g * 255, color.b * 255], i);
-      }
-      const normals = new Float32Array(positionsSize);
-      for (let i = 0; i < normalsSize; i += 3) {
-        normals.set(
-          [normalsDedupe[i], normalsDedupe[i + 1], normalsDedupe[i + 2]],
-          i * 3,
-        );
-        normals.set(
-          [normalsDedupe[i], normalsDedupe[i + 1], normalsDedupe[i + 2]],
-          (i + 1) * 3,
-        );
-        normals.set(
-          [normalsDedupe[i], normalsDedupe[i + 1], normalsDedupe[i + 2]],
-          (i + 2) * 3,
-        );
       }
 
       const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-      geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+      geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
       geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      geometry.index = new THREE.Uint32BufferAttribute(indices, 1);
+
+      geometry.computeVertexNormals();
       geometry.computeBoundingBox();
       geometry.computeBoundsTree();
 
