@@ -562,26 +562,27 @@ export default function ZoneModel(props: ZoneDataProps) {
 
       const newVertex = { x: Math.round(pos.x), z: Math.round(-pos.z) };
 
+      let setPoints;
+      let points;
+      if (getSelectedSubPolygonIdx() !== undefined) {
+        setPoints = setAreas.bind(null, getSelectedAreaIdx(), "holes", getSelectedSubPolygonIdx());
+        points = area.holes?.[getSelectedSubPolygonIdx()];
+      } else {
+        setPoints = setAreas.bind(null, getSelectedAreaIdx(), "polygon");
+        points = polygon;
+      }
+
       if (getSelectedVertexIdx() !== undefined) {
         // If there's a selected vertex, add the new vertex right after it
-        setAreas(
-          getSelectedAreaIdx(),
-          "polygon",
-          produce<Point[]>(vertices => {
-            vertices.splice(getSelectedVertexIdx() + 1, 0, newVertex);
-            return vertices;
-          }),
-        );
+        setPoints(produce<Point[]>(vertices => {
+          vertices.splice(getSelectedVertexIdx() + 1, 0, newVertex);
+          return vertices;
+        }));
         setSelectedVertexIdx(getSelectedVertexIdx() + 1);
       } else {
         // Else just add the new vertex at the end
-        setAreas(
-          getSelectedAreaIdx(),
-          "polygon",
-          polygon.length,
-          newVertex,
-        );
-        setSelectedVertexIdx(polygon.length - 1);
+        setPoints(points.length, newVertex);
+        setSelectedVertexIdx(points.length - 1);
       }
     });
 
@@ -713,6 +714,7 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   const [areas, setAreas] = createStore<Area[]>([]);
   const [getSelectedAreaIdx, setSelectedAreaIdx] = createSignal<number | undefined>();
+  const [getSelectedSubPolygonIdx, setSelectedSubPolygonIdx] = createSignal<number | undefined>();
   const [getSelectedVertexIdx, setSelectedVertexIdx] = createSignal<number | undefined>();
   const [getShowAreaDetails, setShowAreaDetails] = createSignal<boolean>(false);
 
@@ -728,9 +730,15 @@ export default function ZoneModel(props: ZoneDataProps) {
         continue;
       }
 
-      const shape = new THREE.Shape(area.polygon.map(p => {
-        return new THREE.Vector2(p.x, p.z);
-      }));
+      const shape = new THREE.Shape(area.polygon.map(p => new THREE.Vector2(p.x, p.z)));
+      if (area.holes?.length > 0) {
+        for (const hole of area.holes) {
+          if (hole.length < 3) {
+            continue;
+          }
+          shape.holes.push(new THREE.Shape(hole.map(p => new THREE.Vector2(p.x, p.z))));
+        }
+      }
       const geo = new THREE.ExtrudeGeometry(shape, { depth: 20, bevelEnabled: false });
       geo.rotateX(Math.PI / 2);
       geo.translate(0, -area.y + 10, 0);
@@ -791,14 +799,15 @@ export default function ZoneModel(props: ZoneDataProps) {
       return;
     }
 
-    const area = areas[getSelectedAreaIdx()];
-
     let meshes: THREE.Mesh[] = [];
     let elements: Element[] = [];
     let labels: CSS2DObject[] = [];
 
-    for (let i = 0; i < area.polygon.length; i++) {
-      const pos = area.polygon[i];
+    const area = areas[getSelectedAreaIdx()];
+    const points = getSelectedSubPolygonIdx() !== undefined ? area.holes[getSelectedSubPolygonIdx()] : area.polygon;
+
+    for (let i = 0; i < points.length; i++) {
+      const pos = points[i];
       const geo = new THREE.SphereGeometry(1);
       const mat = new THREE.MeshBasicMaterial({ color: 0xFF7F00 });
       const mesh = new THREE.Mesh(geo, mat);
@@ -868,9 +877,11 @@ export default function ZoneModel(props: ZoneDataProps) {
           areas={areas}
           setAreas={setAreas}
           selectedAreaIdx={getSelectedAreaIdx()}
-          setSelectedArea={setSelectedAreaIdx}
+          setSelectedAreaIdx={setSelectedAreaIdx}
+          selectedSubPolygonIdx={getSelectedSubPolygonIdx()}
+          setSelectedSubPolygonIdx={setSelectedSubPolygonIdx}
           selectedVertexIdx={getSelectedVertexIdx()}
-          setSelectedVertex={setSelectedVertexIdx}
+          setSelectedVertexIdx={setSelectedVertexIdx}
         >
         </AreaMenu>
         <div

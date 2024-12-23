@@ -8,9 +8,11 @@ export interface AreaMenuProps {
   areas: Area[];
   setAreas: SetStoreFunction<Area[]>;
   selectedAreaIdx: number | undefined;
-  setSelectedArea: (newIdx: number) => any;
+  setSelectedAreaIdx: (newIdx: number | undefined) => any;
+  selectedSubPolygonIdx: number | undefined;
+  setSelectedSubPolygonIdx: (newIdx: number | undefined) => any;
   selectedVertexIdx: number | undefined;
-  setSelectedVertex: (newIdx: number) => any;
+  setSelectedVertexIdx: (newIdx: number | undefined) => any;
 }
 
 export interface Point {
@@ -21,6 +23,7 @@ export interface Point {
 export interface Area {
   y: number;
   polygon: Point[];
+  holes?: Point[][];
 }
 
 export default function AreaMenu(ps: AreaMenuProps) {
@@ -36,13 +39,21 @@ export default function AreaMenu(ps: AreaMenuProps) {
     element.textContent = ps.areas[ps.selectedAreaIdx].y + "";
   };
 
+  const setActivePoints = (...args: any[]) => {
+    const setPoints = ps.selectedSubPolygonIdx === undefined
+      ? ps.setAreas.bind(null, ps.selectedAreaIdx, "polygon")
+      : ps.setAreas.bind(null, ps.selectedAreaIdx, "holes", ps.selectedSubPolygonIdx);
+
+    return setPoints(...args);
+  };
+
   const setCoordName = (coordName: keyof Point, index: number, element: Element) => {
     const newNum = parseInt(element.textContent);
     if (isNaN(newNum)) {
       element.textContent = ps.areas[ps.selectedAreaIdx].polygon[index][coordName] + "";
       return;
     }
-    ps.setAreas(ps.selectedAreaIdx, "polygon", index, coordName, newNum);
+    setActivePoints(index, coordName, newNum);
     element.textContent = ps.areas[ps.selectedAreaIdx].polygon[index][coordName] + "";
   };
 
@@ -55,72 +66,117 @@ export default function AreaMenu(ps: AreaMenuProps) {
 
   const addNewArea = () => {
     ps.setAreas(ps.areas.length, { y: 0, polygon: [] });
-    ps.setSelectedArea(ps.areas.length - 1);
+    ps.setSelectedAreaIdx(ps.areas.length - 1);
+  };
+
+  const addNewHole = () => {
+    if (ps.selectedVertexIdx !== undefined) {
+      ps.setSelectedVertexIdx(undefined);
+    }
+
+    if (ps.areas[ps.selectedAreaIdx].holes == undefined) {
+      // First hole
+      ps.setAreas(
+        ps.selectedAreaIdx,
+        "holes",
+        [[]],
+      );
+      ps.setSelectedSubPolygonIdx(0);
+    } else {
+      // Additional hole
+      ps.setAreas(
+        ps.selectedAreaIdx,
+        "holes",
+        ps.areas[ps.selectedAreaIdx].holes.length,
+        [],
+      );
+      ps.setSelectedSubPolygonIdx(ps.areas[ps.selectedAreaIdx].holes.length - 1);
+    }
   };
 
   const addNewVertex = () => {
-    const polygon = ps.areas[ps.selectedAreaIdx].polygon;
-    const lastVertex = polygon[polygon.length - 1];
-    const newVertex = { x: lastVertex?.x || 0, z: lastVertex?.z || 0 };
-    ps.setAreas(
-      ps.selectedAreaIdx,
-      "polygon",
-      polygon.length,
-      newVertex,
-    );
-    ps.setSelectedVertex(polygon.length - 1);
+    const isSubPolygon = ps.selectedSubPolygonIdx !== undefined;
+    const points = isSubPolygon ? ps.areas[ps.selectedAreaIdx].holes[ps.selectedSubPolygonIdx] : ps.areas[ps.selectedAreaIdx].polygon;
+
+    const vertexToCopy = ps.selectedVertexIdx !== undefined ? points[ps.selectedVertexIdx] : points[points.length - 1];
+    const newVertex = { x: vertexToCopy?.x || 0, z: vertexToCopy?.z || 0 };
+
+    if (ps.selectedVertexIdx !== undefined) {
+      // Insert after selected
+      setActivePoints(produce<Point[]>(vertices => {
+        vertices.splice(ps.selectedVertexIdx + 1, 0, newVertex);
+        return vertices;
+      }));
+      ps.setSelectedVertexIdx(ps.selectedVertexIdx + 1);
+    } else {
+      // Insert at the end
+      setActivePoints(points.length, newVertex);
+      ps.setSelectedVertexIdx(points.length - 1);
+    }
   };
 
   const moveVertex = (index: number, moveDown: boolean) => {
-    let swapIdx = moveDown ? index + 1 : index - 1;
+    const isSubPolygon = ps.selectedSubPolygonIdx !== undefined;
+    const vertexCount = isSubPolygon ? ps.areas[ps.selectedAreaIdx].holes[ps.selectedSubPolygonIdx].length : ps.areas[ps.selectedAreaIdx].polygon.length;
 
-    const vertexCount = ps.areas[ps.selectedAreaIdx].polygon.length;
+    const swapIdx = moveDown ? index + 1 : index - 1;
     if (swapIdx < 0 || swapIdx >= vertexCount) {
       return;
     }
 
     if (ps.selectedVertexIdx == index) {
-      ps.setSelectedVertex(swapIdx);
+      ps.setSelectedVertexIdx(swapIdx);
     }
 
-    ps.setAreas(
-      ps.selectedAreaIdx,
-      "polygon",
-      produce(vertices => {
-        if (!vertices[swapIdx]) {
-          return vertices;
-        }
-        [vertices[index], vertices[swapIdx]] = [vertices[swapIdx], vertices[index]];
+    setActivePoints(produce(vertices => {
+      if (!vertices[swapIdx]) {
         return vertices;
-      }),
-    );
+      }
+      [vertices[index], vertices[swapIdx]] = [vertices[swapIdx], vertices[index]];
+      return vertices;
+    }));
   };
 
   const deleteVertex = (index: number) => {
-    if (ps.selectedVertexIdx == index && index == ps.areas[ps.selectedAreaIdx].polygon.length - 1) {
-      ps.setSelectedVertex(undefined);
+    const isSubPolygon = ps.selectedSubPolygonIdx !== undefined;
+    const currentPointCount = isSubPolygon
+      ? ps.areas[ps.selectedAreaIdx].holes[ps.selectedSubPolygonIdx].length
+      : ps.areas[ps.selectedAreaIdx].polygon.length;
+
+    if (ps.selectedVertexIdx == index && index == currentPointCount - 1) {
+      ps.setSelectedVertexIdx(undefined);
     }
-    ps.setAreas(
-      ps.selectedAreaIdx,
-      "polygon",
-      vertices => vertices.filter((_, idx) => idx !== index),
-    );
+
+    setActivePoints(vertices => vertices.filter((_, idx) => idx !== index));
   };
 
-  // Clear selected vertex on area change
+  // Clear selected vertex and hole on area change
   createEffect(on(() => ps.selectedAreaIdx, () => {
-    ps.setSelectedVertex(undefined);
+    ps.setSelectedVertexIdx(undefined);
+    ps.setSelectedSubPolygonIdx(undefined);
+  }));
+
+  // Clear selected vertex on sub polygon change
+  createEffect(on(() => ps.selectedSubPolygonIdx, () => {
+    ps.setSelectedVertexIdx(undefined);
   }));
 
   const deleteArea = (index: number) => {
     if (ps.selectedAreaIdx == index) {
-      ps.setSelectedArea(undefined);
+      ps.setSelectedAreaIdx(undefined);
     } else if (ps.selectedAreaIdx > index) {
-      ps.setSelectedArea(ps.selectedAreaIdx - 1);
+      ps.setSelectedAreaIdx(ps.selectedAreaIdx - 1);
     }
-    ps.setAreas(
-      areas => areas.filter((_, idx) => idx !== index),
-    );
+    ps.setAreas(areas => areas.filter((_, idx) => idx !== index));
+  };
+
+  const deleteHole = (index: number) => {
+    if (ps.selectedSubPolygonIdx == index) {
+      ps.setSelectedSubPolygonIdx(undefined);
+    } else if (ps.selectedSubPolygonIdx > index) {
+      ps.setSelectedSubPolygonIdx(ps.selectedSubPolygonIdx - 1);
+    }
+    ps.setAreas(ps.selectedAreaIdx, "holes", holes => holes.filter((_, idx) => idx !== index));
   };
 
   const [copyTimers, setCopyTimers] = createStore<{ [idx: number]: number; }>({});
@@ -136,6 +192,17 @@ export default function AreaMenu(ps: AreaMenuProps) {
       lines.push(`    { x = ${point.x}, z = ${point.z} },`);
     }
     lines.push(`},`);
+    if (area.holes?.length > 0) {
+      lines.push(`holes = {`);
+      for (const hole of area.holes) {
+        lines.push(`    {`);
+        for (const point of hole) {
+          lines.push(`        { x = ${point.x}, z = ${point.z} },`);
+        }
+        lines.push(`    },`);
+      }
+      lines.push(`},`);
+    }
 
     navigator.clipboard.writeText(lines.join("\n"));
 
@@ -154,17 +221,18 @@ export default function AreaMenu(ps: AreaMenuProps) {
     const newAreas = parseAreasDef(str);
     if (newAreas) {
       ps.setAreas(newAreas);
-      ps.setSelectedVertex(undefined);
-      ps.setSelectedArea(undefined);
+      ps.setSelectedAreaIdx(undefined);
+      ps.setSelectedSubPolygonIdx(undefined);
+      ps.setSelectedVertexIdx(undefined);
     }
   };
 
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key == "Escape") {
       if (ps.selectedVertexIdx !== undefined) {
-        ps.setSelectedVertex(undefined);
+        ps.setSelectedVertexIdx(undefined);
       } else if (ps.selectedAreaIdx !== undefined) {
-        ps.setSelectedArea(undefined);
+        ps.setSelectedAreaIdx(undefined);
       }
       return;
     }
@@ -179,19 +247,23 @@ export default function AreaMenu(ps: AreaMenuProps) {
       return;
     }
 
+    function changeCoord(coordName: keyof Point, valueChangeFn: (c: number) => number) {
+      setActivePoints(ps.selectedVertexIdx, coordName, valueChangeFn);
+    }
+
     const diff = e.ctrlKey ? 5 : 1;
     switch (e.key) {
       case "ArrowLeft":
-        ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "x", x => x - diff);
+        changeCoord("x", x => x - diff);
         break;
       case "ArrowRight":
-        ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "x", x => x + diff);
+        changeCoord("x", x => x + diff);
         break;
       case "ArrowUp":
-        ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "z", z => z + diff);
+        changeCoord("z", z => z + diff);
         break;
       case "ArrowDown":
-        ps.setAreas(ps.selectedAreaIdx, "polygon", ps.selectedVertexIdx, "z", z => z - diff);
+        changeCoord("z", z => z - diff);
         break;
       case "N":
         addNewVertex();
@@ -224,7 +296,7 @@ export default function AreaMenu(ps: AreaMenuProps) {
           <Show when={ps.selectedAreaIdx != undefined}>
             <div style={{ height: "50%" }} class="border-t border-t-white p-2">
               <div class="flex flex-row font-semibold">
-                <span class="flex-grow">
+                <span class="flex-grow text-lg">
                   Editing: <span class="text-yellow-300">Area {ps.selectedAreaIdx + 1}</span>
                   <Show
                     when={copyTimers[ps.selectedAreaIdx] === undefined}
@@ -237,10 +309,60 @@ export default function AreaMenu(ps: AreaMenuProps) {
                     >
                     </IoCopy>
                   </Show>
+                  <Show when={ps.selectedSubPolygonIdx !== undefined}>
+                    <span class="ml-1">Hole {ps.selectedSubPolygonIdx + 1}</span>
+                  </Show>
                 </span>
-                <span class="cursor-pointer" onClick={() => ps.setSelectedArea(undefined)}>
+                <span class="cursor-pointer" onClick={() => ps.setSelectedAreaIdx(undefined)}>
                   <IoExitOutline class="inline-block" title="Deselect current area"></IoExitOutline>
                 </span>
+              </div>
+              <Show when={ps.areas[ps.selectedAreaIdx].holes?.length > 0}>
+                <div>
+                  <ul>
+                    <li class="flex flex-row">
+                      <span
+                        class="text-blue-300 cursor-pointer hover:underline font-mono flex-grow"
+                        onClick={() => ps.setSelectedSubPolygonIdx(undefined)}
+                      >
+                        Outline
+                        <Show when={ps.selectedSubPolygonIdx === undefined}>
+                          <span class="ml-1">
+                            <IoLocate class="inline-block">
+                            </IoLocate>
+                          </span>
+                        </Show>
+                      </span>
+                    </li>
+                    <For each={ps.areas[ps.selectedAreaIdx].holes}>
+                      {(item, index) => (
+                        <li class="flex flex-row">
+                          <span
+                            class="text-blue-300 cursor-pointer hover:underline font-mono flex-grow"
+                            onClick={() => ps.setSelectedSubPolygonIdx(index())}
+                          >
+                            Hole {index() + 1}
+                            <Show when={ps.selectedSubPolygonIdx == index()}>
+                              <span class="ml-1">
+                                <IoLocate class="inline-block">
+                                </IoLocate>
+                              </span>
+                            </Show>
+                          </span>
+                          <span class="cursor-pointer px-1 align-bottom text-red-300 font-mono" onClick={() => deleteHole(index())}>
+                            <IoTrash class="inline-block"></IoTrash>
+                          </span>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </div>
+              </Show>
+              <div
+                class="cursor-pointer hover:underline font-bold border rounded-sm px-2 my-1 text-blue-300"
+                onClick={() => addNewHole()}
+              >
+                Add hole
               </div>
               <div class="py-2">
                 <span class="font-semibold">Y:</span>{" "}
@@ -266,19 +388,19 @@ export default function AreaMenu(ps: AreaMenuProps) {
                       <span class="cursor-pointer text-lime-300" onClick={() => moveVertex(ps.selectedVertexIdx, true)}>
                         <IoChevronDown class="inline-block" title="Move selected vertex down"></IoChevronDown>
                       </span>
-                      <span class="cursor-pointer ml-1" onClick={() => ps.setSelectedVertex(undefined)}>
+                      <span class="cursor-pointer ml-1" onClick={() => ps.setSelectedVertexIdx(undefined)}>
                         <IoExitOutline class="inline-block" title="Deselect current vertex"></IoExitOutline>
                       </span>
                     </span>
                   </Show>
                 </div>
                 <ul class="font-mono">
-                  <For each={selectedArea()?.polygon}>
+                  <For each={ps.selectedSubPolygonIdx !== undefined ? selectedArea()?.holes[ps.selectedSubPolygonIdx] : selectedArea()?.polygon}>
                     {(item, index) => (
                       <li
                         class="cursor-pointer"
                         classList={{ "text-yellow-300": ps.selectedVertexIdx == index() }}
-                        onClick={() => ps.setSelectedVertex(index())}
+                        onClick={() => ps.setSelectedVertexIdx(index())}
                       >
                         <span>
                           <span
@@ -346,7 +468,7 @@ export default function AreaMenu(ps: AreaMenuProps) {
                     </span>
                     <span
                       class="text-blue-300 cursor-pointer hover:underline font-mono flex-grow"
-                      onClick={() => ps.setSelectedArea(index())}
+                      onClick={() => ps.setSelectedAreaIdx(index())}
                     >
                       Area {index() + 1}
                     </span>
@@ -381,18 +503,43 @@ export default function AreaMenu(ps: AreaMenuProps) {
 
 const Y_PATTERN = /^y\s*=\s*(\-?\d+)\s*,?/;
 const POLYGON_PATTERN = /^polygon\s*=\s*\{/;
-const XY_PATTERN = /^\{\s*x\s*=\s*(\-?\d+)\s*,\s*z\s*=\s*(\-?\d+),?\s*\}\s*,?/;
+const XZ_PATTERN = /^\{\s*x\s*=\s*(\-?\d+)\s*,\s*z\s*=\s*(\-?\d+),?\s*\}\s*,?/;
+const HOLES_PATTERN = /^holes\s*=\s*\{/;
+const START_BRACKET = /^\{/;
+const END_BRACKET = /^\},?/;
 
-function skipWhitespace(str: string): number {
+function skipWhitespaceAndComments(str: string): number {
   let idx = 0;
-  while (str[idx] == " " || str[idx] == "\n" || str[idx] == "\r") {
-    idx++;
+  while (idx < str.length) {
+    switch (str[idx]) {
+      case " ":
+      case "\n":
+      case "\r":
+        idx++;
+        continue;
+      case "-":
+        // Skip comment lines
+        if (str[idx + 1] == "-") {
+          idx += 2;
+          while (idx < str.length && str[idx] != "\n") {
+            idx++;
+          }
+          idx++;
+          continue;
+        }
+        break;
+      default:
+        break;
+    }
+
+    break;
   }
   return idx;
 }
 
 /// Returns the number of characters to skip to proceed
 function parseAreaDef(str: string, areas: Area[]): number {
+  // Parse y
   const yMatch = Y_PATTERN.exec(str);
   if (!yMatch) {
     return 1;
@@ -403,33 +550,35 @@ function parseAreaDef(str: string, areas: Area[]): number {
     return 1;
   }
   let idx = yMatch[0].length;
-  idx += skipWhitespace(str.substring(idx));
+  idx += skipWhitespaceAndComments(str.substring(idx));
 
+  // Find polygon key
   const polygonMatch = POLYGON_PATTERN.exec(str.substring(idx));
   if (!polygonMatch) {
     return 1;
   }
   idx += polygonMatch[0].length;
-  idx += skipWhitespace(str.substring(idx));
+  idx += skipWhitespaceAndComments(str.substring(idx));
 
   let area = {
     y,
     polygon: [],
   };
 
+  // Parse polygon points
   while (true) {
-    const xyMatch = XY_PATTERN.exec(str.substring(idx));
-    if (!xyMatch) {
+    const xzMatch = XZ_PATTERN.exec(str.substring(idx));
+    if (!xzMatch) {
       break;
     }
-    idx += xyMatch[0].length;
-    idx += skipWhitespace(str.substring(idx));
+    idx += xzMatch[0].length;
+    idx += skipWhitespaceAndComments(str.substring(idx));
 
-    const x = parseFloat(xyMatch[1]);
+    const x = parseFloat(xzMatch[1]);
     if (isNaN(x)) {
       continue;
     }
-    const z = parseFloat(xyMatch[2]);
+    const z = parseFloat(xzMatch[2]);
     if (isNaN(z)) {
       continue;
     }
@@ -437,7 +586,79 @@ function parseAreaDef(str: string, areas: Area[]): number {
     area.polygon.push({ x, z });
   }
 
+  // End polygon table
+  const endBracketMatch = END_BRACKET.exec(str.substring(idx));
+  if (!endBracketMatch) {
+    return 1;
+  }
+  idx += endBracketMatch[0].length;
+  idx += skipWhitespaceAndComments(str.substring(idx));
+
+  // Parse holes, if any
+  const holesMatch = HOLES_PATTERN.exec(str.substring(idx));
+  if (holesMatch) {
+    idx += holesMatch[0].length;
+    idx += skipWhitespaceAndComments(str.substring(idx));
+
+    idx += parseHoles(str.substring(idx), area);
+
+    const endBracketMatch = END_BRACKET.exec(str.substring(idx));
+    if (!endBracketMatch) {
+      return 1;
+    }
+    idx += endBracketMatch[0].length;
+    idx += skipWhitespaceAndComments(str.substring(idx));
+  }
+
   areas.push(area);
+  return idx;
+}
+
+function parseHoles(str: string, area: Area): number {
+  let idx = 0;
+
+  area.holes = [];
+
+  while (idx < str.length) {
+    const startBracketMatch = START_BRACKET.exec(str.substring(idx));
+    if (!startBracketMatch) {
+      break;
+    }
+    idx += startBracketMatch[0].length;
+    idx += skipWhitespaceAndComments(str.substring(idx));
+
+    let hole = [];
+    // Parse hole points
+    while (true) {
+      const xzMatch = XZ_PATTERN.exec(str.substring(idx));
+      if (!xzMatch) {
+        break;
+      }
+      idx += xzMatch[0].length;
+      idx += skipWhitespaceAndComments(str.substring(idx));
+
+      const x = parseFloat(xzMatch[1]);
+      if (isNaN(x)) {
+        continue;
+      }
+      const z = parseFloat(xzMatch[2]);
+      if (isNaN(z)) {
+        continue;
+      }
+
+      hole.push({ x, z });
+    }
+
+    const endBracketMatch = END_BRACKET.exec(str.substring(idx));
+    if (!endBracketMatch) {
+      return 0;
+    }
+    idx += endBracketMatch[0].length;
+    idx += skipWhitespaceAndComments(str.substring(idx));
+
+    area.holes.push(hole);
+  }
+
   return idx;
 }
 
