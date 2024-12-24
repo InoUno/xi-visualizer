@@ -701,6 +701,21 @@ export default function ZoneModel(props: ZoneDataProps) {
   const [getSelectedVertexIdx, setSelectedVertexIdx] = createSignal<number | undefined>();
   const [getShowAreaDetails, setShowAreaDetails] = createSignal<boolean>(false);
 
+  const areaMat = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0.5,
+    color: 0xFCAA58,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const selectedAreaMat = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0.6,
+    color: 0xFCF63C,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+
   // Draw areas
   createEffect(() => {
     let meshes: THREE.Mesh[] = [];
@@ -709,7 +724,7 @@ export default function ZoneModel(props: ZoneDataProps) {
 
     for (let i = 0; i < areas.length; i++) {
       const area = areas[i];
-      if (area.polygon.length < 3) {
+      if (area.hidden || area.polygon.length < 3) {
         continue;
       }
 
@@ -727,12 +742,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       geo.translate(0, -area.y + 10, 0);
       geo.computeBoundingBox();
 
-      let mat;
-      if (getSelectedAreaIdx() == i) {
-        mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6, color: 0xFCF63C, depthWrite: false });
-      } else {
-        mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.5, color: 0xFCAA58, depthWrite: false });
-      }
+      const mat = getSelectedAreaIdx() == i ? selectedAreaMat : areaMat;
       const mesh = new THREE.Mesh(geo, mat);
 
       mesh.layers.enableAll();
@@ -787,6 +797,10 @@ export default function ZoneModel(props: ZoneDataProps) {
     let labels: CSS2DObject[] = [];
 
     const area = areas[getSelectedAreaIdx()];
+    if (area.hidden) {
+      return;
+    }
+
     const points = getSelectedSubPolygonIdx() !== undefined ? area.holes[getSelectedSubPolygonIdx()] : area.polygon;
 
     for (let i = 0; i < points.length; i++) {

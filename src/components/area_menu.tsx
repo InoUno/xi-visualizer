@@ -1,4 +1,4 @@
-import { IoCheckmarkDoneSharp, IoChevronDown, IoChevronUp, IoCopy, IoExitOutline, IoLocate, IoTrash } from "solid-icons/io";
+import { IoCheckmarkDoneSharp, IoChevronDown, IoChevronUp, IoCopy, IoExitOutline, IoEye, IoEyeOff, IoLocate, IoTrash } from "solid-icons/io";
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import { createStore, produce, SetStoreFunction } from "solid-js/store";
 
@@ -24,6 +24,7 @@ export interface Area {
   y: number;
   polygon: Point[];
   holes?: Point[][];
+  hidden?: boolean;
 }
 
 export default function AreaMenu(ps: AreaMenuProps) {
@@ -275,6 +276,11 @@ export default function AreaMenu(ps: AreaMenuProps) {
     e.preventDefault();
   }
 
+  const toggleAllAreasHidden = () => {
+    const newHidden = ps.areas.some(area => !area.hidden);
+    ps.setAreas({ from: 0, to: ps.areas.length - 1 }, "hidden", newHidden);
+  };
+
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown);
   });
@@ -448,18 +454,42 @@ export default function AreaMenu(ps: AreaMenuProps) {
 
           {/* Area list */}
           <div class="border-t border-t-white p-1">
-            <span class="font-semibold">Areas</span>
+            <div>
+              <span
+                class="px-0.5 mr-1 align-bottom cursor-pointer"
+                onClick={toggleAllAreasHidden}
+              >
+                <Show
+                  when={ps.areas.some(area => !area.hidden)}
+                  fallback={<IoEyeOff class="inline-block text-gray-500"></IoEyeOff>}
+                >
+                  <IoEye class="inline-block"></IoEye>
+                </Show>
+              </span>
+              <span class="font-semibold">Areas</span>
+            </div>
             <ul>
               <For each={ps.areas}>
                 {(item, index) => (
                   <li class="flex flex-row">
+                    <span
+                      class="px-0.5 align-bottom cursor-pointer"
+                      onClick={() => ps.setAreas(index(), "hidden", !ps.areas[index()].hidden)}
+                    >
+                      <Show
+                        when={!item.hidden}
+                        fallback={<IoEyeOff class="inline-block text-gray-500"></IoEyeOff>}
+                      >
+                        <IoEye class="inline-block"></IoEye>
+                      </Show>
+                    </span>
                     <span class="px-1 align-bottom">
                       <Show
                         when={copyTimers[index()] === undefined}
                         fallback={<IoCheckmarkDoneSharp class="font-bold inline-block text-green-300"></IoCheckmarkDoneSharp>}
                       >
                         <IoCopy
-                          class="inline-block text-blue-300 cursor-pointer"
+                          class="inline-block cursor-pointer"
                           onClick={() => areaToClipboard(index())}
                           title="Copy area to clipboard"
                         >
