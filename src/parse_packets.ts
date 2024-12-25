@@ -7,6 +7,7 @@ export interface Position {
   x: number;
   y: number;
   z: number;
+  rotation?: number;
 }
 
 interface BaseEntityUpdate {
@@ -54,7 +55,7 @@ export class PacketParser {
   public clientUpdates: PositionUpdate[];
 
   private lastClientPosition: Position;
-  private currentShownEntities: { [entityKey: string]: PositionUpdate; };
+  private currentShownEntities: { [entityKey: string]: { time: number; pos: Position; }; };
   private currentZoneId: number = 0;
 
   constructor(content: string) {
@@ -117,13 +118,6 @@ export class PacketParser {
   }
 
   private parseEntityUpdate(lines: string[]) {
-    const updateMask = this.extractByte(lines, 0x0A);
-    const hasPosition = (updateMask & 0x01) > 0;
-    if (!hasPosition) {
-      // Skip packets without positions
-      return;
-    }
-
     const entityId = this.extractU32(lines, 0x04);
     const zoneId = (entityId >> 12) & 0x01FF;
     this.currentZoneId = zoneId;
@@ -131,10 +125,22 @@ export class PacketParser {
     const entityIndex = this.extractU16(lines, 0x08);
     const entityKey = `0x${entityIndex.toString(16).toUpperCase().padStart(3, "0")}-${entityId}`;
 
+    const timestamp = this.parseTimestamp(lines[0]);
+
+    const updateMask = this.extractByte(lines, 0x0A);
+    const hasPosition = (updateMask & 0x01) > 0;
+    if (!hasPosition) {
+      // Skip packets without positions, but update latest timestamp if present
+      if (this.currentShownEntities[entityKey]) {
+        this.currentShownEntities[entityKey].time = timestamp;
+      }
+      return;
+    }
+
     const name = (updateMask & 0x08) > 0 ? this.extractString(lines, 0x34) : undefined;
 
-    const timestamp = this.parseTimestamp(lines[0]);
     const pos = this.extractPosition(lines, 0x0C);
+    pos.rotation = this.extractByte(lines, 0x0B);
 
     let entityPositions = this.zoneEntityUpdates[zoneId] = this.zoneEntityUpdates[zoneId] || {};
     let list = entityPositions[entityKey] = entityPositions[entityKey] || [];
@@ -153,7 +159,10 @@ export class PacketParser {
       });
       delete this.currentShownEntities[entityKey];
     } else {
-      this.currentShownEntities[entityKey] = update;
+      this.currentShownEntities[entityKey] = {
+        time: update.time,
+        pos,
+      };
     }
   }
 
@@ -207,16 +216,16 @@ export class PacketParser {
       if (!this.currentShownEntities[entityKey]) {
         return;
       }
-      const entityUpdate = this.currentShownEntities[entityKey];
+      const entityInfo = this.currentShownEntities[entityKey];
       if (
-        this.isOutOfRangeFromClient(entityUpdate.pos)
-        || (timestamp - entityUpdate.time > 15000 && this.isFarFromClient(entityUpdate.pos))
+        this.isOutOfRangeFromClient(entityInfo.pos)
+        || (timestamp - entityInfo.time > 3000 && this.isFarFromClient(entityInfo.pos))
       ) {
         let entityPositions = this.zoneEntityUpdates[this.currentZoneId] = this.zoneEntityUpdates[this.currentZoneId] || {};
         let list = entityPositions[entityKey] = entityPositions[entityKey] || [];
         list.push({
           kind: EntityUpdateKind.OutOfRange,
-          time: entityUpdate.time + 1000,
+          time: entityInfo.time + 1000,
         });
         delete this.currentShownEntities[entityKey];
       }
