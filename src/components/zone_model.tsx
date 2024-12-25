@@ -115,7 +115,7 @@ export default function ZoneModel(props: ZoneDataProps) {
 
           let name = "";
           for (const update of updates) {
-            if ("name" in update) {
+            if ("name" in update && update.name?.length > 0) {
               name = update.name;
               break;
             }
