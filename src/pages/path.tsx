@@ -98,7 +98,7 @@ export default function PacketPage({}: PathPageProps) {
 
   return (
     <section class="px-8 py-4">
-      <h1 class="text-2xl font-bold">Packet</h1>
+      <h1 class="text-2xl font-bold">Path analyzer</h1>
 
       <Switch
         fallback={
