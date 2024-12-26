@@ -1,6 +1,6 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
 
-import { Chart, ChartData, ChartOptions, Colors, Legend, Title, Tooltip } from "chart.js";
+import { CategoryScale, Chart, ChartData, ChartOptions, Colors, Legend, LinearScale, Title, Tooltip } from "chart.js";
 import { Bar } from "solid-chartjs";
 import { Position } from "../parse_packets";
 import { PathPart, PathPartKind } from "../parse_path";
@@ -13,7 +13,7 @@ export default function PathVisualsComponent(ps: PathVisualsProps) {
   const [getShowRaw, setShowRaw] = createSignal<boolean>(false);
 
   onMount(() => {
-    Chart.register(Title, Tooltip, Legend, Colors);
+    Chart.register(Title, Tooltip, Legend, Colors, LinearScale, CategoryScale);
     Chart.defaults.color = "#FFFFFF";
   });
 
