@@ -87,7 +87,7 @@ export function parsePath(updates: EntityUpdate[]): PathPart[] {
 
           path.push({
             kind: PathPartKind.Start,
-            time: prevMoveUpdate.time,
+            time: update.time,
             pauseTime: timeSinceLastMove,
             rot: update.pos.rotation!,
             rotDiff: calcRotDiff(prevMoveUpdate.pos.rotation!, update.pos.rotation!),
