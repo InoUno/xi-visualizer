@@ -11,6 +11,9 @@ export default function HomePage() {
             <A href="/packet">Packet visualizer</A>
           </li>
           <li>
+            <A href="/packet">Path analyzer</A>
+          </li>
+          <li>
             <A href="/zone">Zone viewer</A>
           </li>
         </ul>

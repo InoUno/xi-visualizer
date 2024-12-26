@@ -263,7 +263,7 @@ export default function ZoneModel(props: ZoneDataProps) {
           }
           prevPosUpdate = update;
           count++;
-        } else if (prevPosUpdate && update.kind == EntityUpdateKind.OutOfRange) {
+        } else if (prevPosUpdate && (update.kind == EntityUpdateKind.OutOfRange || update.kind == EntityUpdateKind.Despawn)) {
           // Out of range
           prevPosUpdate = undefined;
           count++;
@@ -302,7 +302,7 @@ export default function ZoneModel(props: ZoneDataProps) {
           // Add current position frame
           addFrame(update.pos, update.time, true);
           prevPosUpdate = update;
-        } else if (prevPosUpdate && update.kind == EntityUpdateKind.OutOfRange) {
+        } else if (prevPosUpdate && (update.kind == EntityUpdateKind.OutOfRange || update.kind == EntityUpdateKind.Despawn)) {
           addFrame(prevPosUpdate.pos, prevPosUpdate.time + 1000, false);
           prevPosUpdate = undefined;
         }

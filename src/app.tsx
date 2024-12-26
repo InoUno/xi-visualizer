@@ -19,6 +19,11 @@ const App: Component = (props: { children: Element; }) => {
             </A>
           </li>
           <li class="py-2 px-4">
+            <A href="/path" class="no-underline hover:underline">
+              Path
+            </A>
+          </li>
+          <li class="py-2 px-4">
             <A href="/zone" class="no-underline hover:underline">
               Zone
             </A>

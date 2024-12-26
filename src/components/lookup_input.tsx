@@ -10,6 +10,7 @@ interface LookupInputProps<T, K extends string | number> {
   multiple?: boolean;
   initialId?: string;
   placeholder?: string;
+  skipNameSort?: boolean;
 }
 
 interface Option<T> {
@@ -27,7 +28,9 @@ export default function LookupInput<T, K extends string | number>(props: LookupI
         : "" + idx,
       data: props.options[idx],
     }));
-    options.sort((a, b) => a.name.replace("_", "").localeCompare(b.name.replace("_", "")));
+    if (!props.skipNameSort) {
+      options.sort((a, b) => a.name.replace("_", "").localeCompare(b.name.replace("_", "")));
+    }
     return options;
   });
 

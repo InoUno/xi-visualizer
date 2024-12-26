@@ -80,6 +80,7 @@ export class PacketParser {
         }
         this.parsePacket(this.lines.slice(start, i));
         packetCount++;
+        i--;
       }
     }
     console.timeEnd("parse-packets");
@@ -127,7 +128,21 @@ export class PacketParser {
 
     const timestamp = this.parseTimestamp(lines[0]);
 
+    let entityUpdates = this.zoneEntityUpdates[zoneId] = this.zoneEntityUpdates[zoneId] || {};
+    let list = entityUpdates[entityKey] = entityUpdates[entityKey] || [];
+
     const updateMask = this.extractByte(lines, 0x0A);
+    if ((updateMask & 0x20) > 0) {
+      // Despawn packet
+      delete this.currentShownEntities[entityKey];
+      const update = {
+        kind: EntityUpdateKind.Despawn as EntityUpdateKind.Despawn,
+        time: timestamp,
+      };
+      list.push(update);
+      return;
+    }
+
     const hasPosition = (updateMask & 0x01) > 0;
     if (!hasPosition) {
       // Skip packets without positions, but update latest timestamp if present
@@ -142,8 +157,6 @@ export class PacketParser {
     const pos = this.extractPosition(lines, 0x0C);
     pos.rotation = this.extractByte(lines, 0x0B);
 
-    let entityPositions = this.zoneEntityUpdates[zoneId] = this.zoneEntityUpdates[zoneId] || {};
-    let list = entityPositions[entityKey] = entityPositions[entityKey] || [];
     const update = {
       kind: EntityUpdateKind.Position as EntityUpdateKind.Position,
       time: timestamp,
@@ -219,7 +232,6 @@ export class PacketParser {
       const entityInfo = this.currentShownEntities[entityKey];
       if (
         this.isOutOfRangeFromClient(entityInfo.pos)
-        || (timestamp - entityInfo.time > 3000 && this.isFarFromClient(entityInfo.pos))
       ) {
         let entityPositions = this.zoneEntityUpdates[this.currentZoneId] = this.zoneEntityUpdates[this.currentZoneId] || {};
         let list = entityPositions[entityKey] = entityPositions[entityKey] || [];
