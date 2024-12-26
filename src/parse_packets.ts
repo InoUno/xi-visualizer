@@ -121,6 +121,10 @@ export class PacketParser {
   private parseEntityUpdate(lines: string[]) {
     const entityId = this.extractU32(lines, 0x04);
     const zoneId = (entityId >> 12) & 0x01FF;
+    if (zoneId == 0) {
+      // Don't show entities with the unknown zone ID
+      return;
+    }
     this.currentZoneId = zoneId;
 
     const entityIndex = this.extractU16(lines, 0x08);
@@ -180,6 +184,10 @@ export class PacketParser {
   }
 
   private parseEntityWidescan(lines: string[]) {
+    if (this.currentZoneId == 0) {
+      // Don't handle when it's the unknown zone ID
+      return;
+    }
     if (!this.lastClientPosition) {
       // Skip widescan results before the latest client position is known,
       // because widescan results are relative to it.
@@ -213,6 +221,10 @@ export class PacketParser {
   }
 
   private parseClientUpdate(lines: string[]) {
+    if (this.currentZoneId == 0) {
+      // Don't handle when it's the unknown zone ID
+      return;
+    }
     const targetIndex = this.extractU16(lines, 0x16);
 
     const timestamp = this.parseTimestamp(lines[0]);
