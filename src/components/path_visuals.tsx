@@ -41,6 +41,10 @@ export default function PathVisualsComponent(ps: PathVisualsProps) {
       }
     }
 
+    if (waitTimes.length == 0) {
+      return <div>Not enough data to analyze wait times.</div>;
+    }
+
     const timeDiff = maxTime - minTime;
     const barCount = timeDiff + 1;
     const bucketSize = 1;
@@ -100,6 +104,10 @@ export default function PathVisualsComponent(ps: PathVisualsProps) {
       } else if (part.kind == PathPartKind.NewDirection) {
         turnCount++;
       }
+    }
+
+    if (turnCounts.length == 0) {
+      return <div>Not enough data to analyze turns.</div>;
     }
 
     const diff = maxTurns - minTurns;
