@@ -61,47 +61,47 @@ export function parsePath(updates: EntityUpdate[]): PathPart[] {
 
     if (!prevUpdate) {
       prevUpdate = update;
-      prevMoveUpdate = update;
-      prevRotUpdate = update;
       continue;
     }
 
     distMoved = calcDistance(update.pos, prevUpdate.pos);
 
     if (distMoved > 0.1) {
-      timeSinceLastMove = update.time - prevMoveUpdate.time;
+      if (prevMoveUpdate) {
+        timeSinceLastMove = update.time - prevMoveUpdate.time;
 
-      if (timeSinceLastMove > 3000) {
-        if (prevStopUpdate) {
-          moveTime = prevMoveUpdate.time - prevStopUpdate.time;
-          stopDist = calcDistance(prevMoveUpdate.pos, prevStopUpdate.pos);
-          path.push({
-            kind: PathPartKind.End,
-            time: prevMoveUpdate.time,
-            moveTime: moveTime,
-            pathDist: stopDist,
-            legDist: calcDistance(prevRotUpdate.pos, prevMoveUpdate.pos),
-            startPos: prevStopUpdate.pos,
-            endPos: prevMoveUpdate.pos,
-          });
+        if (timeSinceLastMove > 3000) {
+          if (prevStopUpdate) {
+            moveTime = prevMoveUpdate.time - prevStopUpdate.time;
+            stopDist = calcDistance(prevMoveUpdate.pos, prevStopUpdate.pos);
+            path.push({
+              kind: PathPartKind.End,
+              time: prevMoveUpdate.time,
+              moveTime: moveTime,
+              pathDist: stopDist,
+              legDist: calcDistance(prevRotUpdate.pos, prevMoveUpdate.pos),
+              startPos: prevStopUpdate.pos,
+              endPos: prevMoveUpdate.pos,
+            });
 
-          path.push({
-            kind: PathPartKind.Start,
-            time: update.time,
-            pauseTime: timeSinceLastMove,
-            rot: update.pos.rotation!,
-            rotDiff: calcRotDiff(prevMoveUpdate.pos.rotation!, update.pos.rotation!),
-          });
+            path.push({
+              kind: PathPartKind.Start,
+              time: update.time,
+              pauseTime: timeSinceLastMove,
+              rot: update.pos.rotation!,
+              rotDiff: calcRotDiff(prevMoveUpdate.pos.rotation!, update.pos.rotation!),
+            });
+          }
+
+          prevStopUpdate = update;
+          prevRotUpdate = update;
         }
-
-        prevStopUpdate = update;
-        prevRotUpdate = update;
       }
 
       prevMoveUpdate = update;
     }
 
-    if (update.pos.rotation != prevRotUpdate.pos.rotation) {
+    if (prevRotUpdate && update.pos.rotation != prevRotUpdate.pos.rotation) {
       path.push({
         kind: PathPartKind.NewDirection,
         time: update.time,
