@@ -284,8 +284,8 @@ export default function PathVisualsComponent(ps: PathVisualsProps) {
   }
 
   return (
-    <div class="mt-5 mb-2 p-3 bg-slate-800 rounded">
-      <div class="p-5 border border-black" style={{ "max-height": "35vh" }}>
+    <div class="mt-5 p-3 bg-slate-800 rounded">
+      <div class="p-5 mb-2 border border-black" style={{ "max-height": "35vh" }}>
         {turnBars()}
       </div>
       <div class="p-5 mb-2 border border-black" style={{ "max-height": "35vh" }}>
