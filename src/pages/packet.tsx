@@ -1,11 +1,12 @@
-import { createEffect, createSignal, Match, Switch } from "solid-js";
+import { createEffect, createSignal, For, Match, Switch } from "solid-js";
 
 import { createDropzone } from "@soorria/solid-dropzone";
+import { createStore } from "solid-js/store";
 import ZoneModel, { ZoneData } from "../components/zone_model";
 import zones, { ZoneInfo } from "../data/zones";
 import { PacketParser } from "../parse_packets";
 import { ByZone } from "../types";
-import { decompress } from "../util";
+import { decompress, fetchProgress } from "../util";
 
 interface PacketPageProps {
 }
@@ -14,6 +15,9 @@ export default function PacketPage({}: PacketPageProps) {
   const [getParsedPackets, setParsedPackets] = createSignal<PacketParser | undefined>(undefined);
   const [getZoneModels, setZoneModels] = createSignal<ByZone<ZoneData> | undefined>(undefined);
   const [getStatus, setStatus] = createSignal<string | undefined>();
+
+  const [getZoneIds, setZoneIds] = createSignal<number[]>([]);
+  const [zoneProgress, setZoneProgress] = createStore<ByZone<string>>({});
 
   function parseFile(file: File) {
     setStatus("Parsing packets");
@@ -41,22 +45,39 @@ export default function PacketPage({}: PacketPageProps) {
     if (!parsedPackets) {
       return;
     }
+
     setStatus("Loading zones");
+    setZoneIds(Object.keys(parsedPackets.zoneEntityUpdates).map(x => parseInt(x)));
+
     let promises = [];
     let zoneModels: ByZone<ZoneData> = {};
+
     for (const zoneId in parsedPackets.zoneEntityUpdates) {
+      const zoneIdNum = parseInt(zoneId);
+
       promises.push(
         new Promise(async resolve => {
           console.time(`load-mesh-${zoneId}`);
+
           const url = `${import.meta.env.BASE_URL}/zone_meshes/${zoneId}.ximesh`;
-          const response = await fetch(url);
-          const compressed = await response.arrayBuffer();
+          const compressed = await fetchProgress(url, (progress: number) => {
+            if (progress === undefined) {
+              setZoneProgress(zoneIdNum, undefined);
+            } else {
+              setZoneProgress(zoneIdNum, `${(progress * 100).toFixed(0).padStart(3, " ")}% - Downloading mesh for ${zones[zoneId].name}`);
+              console.log("Setting ", zoneIdNum);
+            }
+          });
+
+          setZoneProgress(zoneIdNum, `Decompressing ${zones[zoneId].name}`);
           const bytes = await decompress(compressed);
           zoneModels[zoneId] = {
-            id: parseInt(zoneId),
+            id: zoneIdNum,
             name: zones[zoneId].name,
             mesh: bytes,
           };
+          setZoneProgress(zoneIdNum, undefined);
+
           console.timeEnd(`load-mesh-${zoneId}`);
           resolve(true);
         }),
@@ -93,6 +114,16 @@ export default function PacketPage({}: PacketPageProps) {
         </Match>
         <Match when={getStatus() && !getZoneModels()}>
           <div>{getStatus()}</div>
+          <pre>
+            {getZoneIds().map(zoneId => {
+                const progress = zoneProgress[zoneId];
+                if (progress) {
+                  return <span>{progress}</span>
+                } else {
+                  return <>None</>;
+                }
+            })}
+          </pre>
         </Match>
       </Switch>
     </section>
