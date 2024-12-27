@@ -120,7 +120,7 @@ export default function PacketPage({}: PacketPageProps) {
                 if (progress) {
                   return <span>{progress}</span>
                 } else {
-                  return <>None</>;
+                  return <></>;
                 }
             })}
           </pre>
