@@ -65,7 +65,6 @@ export default function PacketPage({}: PacketPageProps) {
               setZoneProgress(zoneIdNum, undefined);
             } else {
               setZoneProgress(zoneIdNum, `${(progress * 100).toFixed(0).padStart(3, " ")}% - Downloading mesh for ${zones[zoneId].name}`);
-              console.log("Setting ", zoneIdNum);
             }
           });
 

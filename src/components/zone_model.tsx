@@ -99,6 +99,9 @@ export default function ZoneModel(props: ZoneDataProps) {
         entityKey => {
           const updates: EntityUpdate[] = props.entityUpdates[zoneId][entityKey];
           const updateCount = updates.length;
+          if (updateCount == 0) {
+            return undefined;
+          }
 
           firstTime = Math.min(firstTime, updates[0].time);
           lastTime = Math.max(lastTime, updates[updates.length - 1].time);
@@ -130,7 +133,7 @@ export default function ZoneModel(props: ZoneDataProps) {
             updateCount,
           };
         },
-      );
+      ).filter(x => x !== undefined);
 
       result[zoneId] = {
         entityRows: rows,

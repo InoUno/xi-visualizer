@@ -225,7 +225,7 @@ function toDateTimeString(timestamp: number) {
   const d = new Date(timestamp);
   return d.getFullYear()
     + "-"
-    + d.getMonth().toString().padStart(2, "0")
+    + (d.getMonth() + 1).toString().padStart(2, "0")
     + "-"
     + d.getDate().toString().padStart(2, "0")
     + "T"
@@ -244,9 +244,9 @@ function fromDateTimeString(dateString: string) {
   const msSplit = splitT[1].split(".");
   const timeNums = msSplit[0].split(":").map(x => parseInt(x));
   return new Date(
-    dateNums[0] || new Date().getFullYear(),
-    dateNums[1] || new Date().getMonth(),
-    dateNums[2] || new Date().getDate(),
+    dateNums[0] ?? new Date().getFullYear(),
+    dateNums[1] !== undefined ? dateNums[1] - 1 : new Date().getMonth(),
+    dateNums[2] ?? new Date().getDate(),
     timeNums[0] || 0,
     timeNums[1] || 0,
     timeNums[2] || 0,
