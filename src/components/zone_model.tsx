@@ -147,6 +147,9 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   const [scene, camera] = setupBaseScene();
 
+  const raycaster = new THREE.Raycaster();
+  raycaster.firstHitOnly = true;
+
   // Create zones
   const zoneMeshes = createMemo((prevZoneMeshes: ByZone<THREE.Mesh>) => {
     const zoneMeshes = {};
@@ -228,13 +231,73 @@ export default function ZoneModel(props: ZoneDataProps) {
     return zoneMeshes;
   }, {});
 
-  // Adjust widescan updates to nearest point on the zone mesh in the Y-axis
+  // Adjust widescan updates to nearest ground point on the zone mesh in the Y-axis
   const adjustedEntityUpdates = createMemo(() => {
+    const scanPoint = new THREE.Vector3();
+    const rayStartPoint = new THREE.Vector3();
+    const down = new THREE.Vector3(0, -1, 0);
+    const rayResults: THREE.Intersection<THREE.Object3D<THREE.Object3DEventMap>>[] = [];
+    let bestResult: THREE.Intersection<THREE.Object3D<THREE.Object3DEventMap>> | undefined = undefined;
+    let bestDistance = Number.MAX_SAFE_INTEGER;
+
+    // Enable multi hit for this purpose
+    raycaster.firstHitOnly = false;
+
     const adjusted: ZoneEntityUpdates = {};
     for (const zoneId in props.entityUpdates) {
+      const zoneMesh = zoneMeshes()[zoneId];
+      if (!zoneMesh) {
+        continue;
+      }
+
+      adjusted[zoneId] = {};
+
       for (const entityKey in props.entityUpdates[zoneId]) {
+        const updates = props.entityUpdates[zoneId][entityKey];
+        const adjustedUpdates = adjusted[zoneId][entityKey] = new Array(updates.length);
+        for (let i = 0; i < updates.length; i++) {
+          const update = updates[i];
+          if (update.kind !== EntityUpdateKind.Widescan) {
+            adjustedUpdates[i] = update;
+            continue;
+          }
+
+          scanPoint.set(update.pos.x, -update.pos.y, update.pos.z);
+          rayStartPoint.set(update.pos.x, -update.pos.y + 100, update.pos.z);
+
+          raycaster.set(rayStartPoint, down);
+          raycaster.intersectObject(zoneMesh, false, rayResults);
+
+          bestResult = undefined;
+          bestDistance = Number.MAX_SAFE_INTEGER;
+          for (const result of rayResults) {
+            const dist = result.point.distanceTo(scanPoint);
+            if (!bestResult || dist < bestDistance) {
+              bestResult = result;
+              bestDistance = dist;
+            }
+          }
+
+          if (bestResult) {
+            adjustedUpdates[i] = {
+              ...update,
+              pos: {
+                ...update.pos,
+                y: -bestResult.point.y - 1,
+              },
+            };
+          } else {
+            // Did not find a new Y value for the update, so keep whatever it had originally
+            adjustedUpdates[i] = update;
+          }
+
+          // Clear the result array again
+          rayResults.length = 0;
+        }
       }
     }
+
+    raycaster.firstHitOnly = true;
     return adjusted;
   });
 
@@ -316,7 +379,7 @@ export default function ZoneModel(props: ZoneDataProps) {
         const showNum = show ? 1 : 0;
         opacity[i] = showNum;
         scale.set([showNum, showNum, showNum], i * 3);
-        positions.set([pos.x, pos.y * -1 + 1, pos.z], i * 3);
+        positions.set([pos.x, -pos.y, pos.z], i * 3);
         i++;
       };
 
@@ -379,7 +442,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       for (let i = startIdx, j = 0; i < endIdx; i++, j++) {
         times[j] = (updates[i].time - startTime) / 1000;
         const pos = updates[i].pos;
-        positions.set([pos.x, pos.y * -1 + 1, pos.z], j * 3);
+        positions.set([pos.x, -pos.y, pos.z], j * 3);
       }
 
       const positionKF = new THREE.VectorKeyframeTrack(".position", times, positions);
@@ -415,11 +478,11 @@ export default function ZoneModel(props: ZoneDataProps) {
   const discreteEntityMeshes = createMemo(() => {
     let discreteEntityMeshes: ByZone<{ [entityKey: string]: THREE.InstancedMesh; }> = {};
 
-    for (const zoneId in props.entityUpdates) {
+    for (const zoneId in adjustedEntityUpdates()) {
       const entities = (discreteEntityMeshes[zoneId] = discreteEntityMeshes[zoneId] || {});
 
-      for (const entityKey in props.entityUpdates[zoneId]) {
-        const updates = props.entityUpdates[zoneId][entityKey];
+      for (const entityKey in adjustedEntityUpdates()[zoneId]) {
+        const updates = adjustedEntityUpdates()[zoneId][entityKey];
         const mesh = new THREE.InstancedMesh(geo, mat, updates.length);
 
         scene.add(mesh);
@@ -450,13 +513,13 @@ export default function ZoneModel(props: ZoneDataProps) {
     const meshes = discreteEntityMeshes()[zoneId];
     let obj = new THREE.Object3D();
     const hideWidescan = !getShowWidescan();
-    for (const entityKey in props.entityUpdates[zoneId]) {
+    for (const entityKey in adjustedEntityUpdates()[zoneId]) {
       if (entitySettings[entityKey]?.hidden) {
         continue;
       }
 
       const mesh = meshes[entityKey];
-      const updates = props.entityUpdates[zoneId][entityKey];
+      const updates = adjustedEntityUpdates()[zoneId][entityKey];
 
       // Skip until first visible update
       let idx = binarySearchLower(updates, getDiscreteLowerTime(), x => x.time);
@@ -630,8 +693,6 @@ export default function ZoneModel(props: ZoneDataProps) {
   const stats = new Stats();
   stats.dom.style.position = "absolute";
 
-  const raycaster = new THREE.Raycaster();
-  raycaster.firstHitOnly = true;
   const cameraMouse = new THREE.Vector2(1, 1);
   const screenMouse = new THREE.Vector2(1, 1);
 
