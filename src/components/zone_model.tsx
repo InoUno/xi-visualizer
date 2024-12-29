@@ -1090,7 +1090,7 @@ export default function ZoneModel(props: ZoneDataProps) {
               { name: "Count", key: "updateCount" },
             ]}
             defaultSortColumn="index"
-            defaultSortAsc={false}
+            defaultSortAsc={true}
             additionalColumns={[
               {
                 name: "Visible",
