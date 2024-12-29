@@ -1,6 +1,6 @@
 import CameraControls from "camera-controls";
 import { IoHelpCircle } from "solid-icons/io";
-import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import * as THREE from "three";
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
@@ -71,7 +71,6 @@ export default function ZoneModel(props: ZoneDataProps) {
   const [getSelectedZone, setSelectedZone] = createSignal<number>(startingZoneId);
 
   const [entitySettings, setEntitySettings] = createStore<EntitiesSettings>();
-  const [zoneMeshes, setZoneMeshes] = createStore<ByZone<THREE.Mesh>>();
 
   const [getShowWidescan, setShowWidescan] = createSignal<boolean>(true);
 
@@ -79,7 +78,7 @@ export default function ZoneModel(props: ZoneDataProps) {
   const [getDiscreteLowerTime, setDiscreteLowerTime] = createSignal<number>(0);
   const [getDiscreteUpperTime, setDiscreteUpperTime] = createSignal<number>(1);
 
-  const parsedEntityUpdates = createMemo(() => {
+  const summarizedEntityUpdates = createMemo(() => {
     if (!props.entityUpdates) {
       return undefined;
     }
@@ -149,12 +148,12 @@ export default function ZoneModel(props: ZoneDataProps) {
   const [scene, camera] = setupBaseScene();
 
   // Create zones
-  createEffect(() => {
-    cleanUpZones();
-
+  const zoneMeshes = createMemo((prevZoneMeshes: ByZone<THREE.Mesh>) => {
+    const zoneMeshes = {};
     for (const zoneId in props.zoneData) {
-      if (zoneMeshes[zoneId]) {
-        // Mesh is already set up
+      if (zoneId in prevZoneMeshes) {
+        // Mesh is already set up, so reuse it
+        zoneMeshes[zoneId] = prevZoneMeshes[zoneId];
         continue;
       }
 
@@ -194,8 +193,6 @@ export default function ZoneModel(props: ZoneDataProps) {
 
       const mesh = new THREE.Mesh(geometry, material);
 
-      setZoneMeshes(parseInt(zoneId), mesh);
-
       // Add wireframe
       var geo = new THREE.WireframeGeometry(mesh.geometry); // EdgesGeometry or WireframeGeometry
       var mat = new THREE.LineBasicMaterial({
@@ -208,9 +205,37 @@ export default function ZoneModel(props: ZoneDataProps) {
       mesh.add(wireframe);
       mesh.visible = false;
 
+      zoneMeshes[parseInt(zoneId)] = mesh;
+
       scene.add(mesh);
       console.timeEnd("setup-mesh-" + zoneId);
     }
+
+    onCleanup(() => {
+      for (const zoneId in zoneMeshes) {
+        if (props.zoneData[zoneId]) {
+          // This zone ID is still needed
+          continue;
+        }
+
+        console.log("Disposing zone " + zoneId);
+        const mesh = zoneMeshes[zoneId];
+        scene.remove(mesh);
+        cleanupNode(mesh);
+      }
+    });
+
+    return zoneMeshes;
+  }, {});
+
+  // Adjust widescan updates to nearest point on the zone mesh in the Y-axis
+  const adjustedEntityUpdates = createMemo(() => {
+    const adjusted: ZoneEntityUpdates = {};
+    for (const zoneId in props.entityUpdates) {
+      for (const entityKey in props.entityUpdates[zoneId]) {
+      }
+    }
+    return adjusted;
   });
 
   const [getShowAnimated, setShowAnimated] = createSignal<boolean>(false);
@@ -237,7 +262,7 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
 
     const zoneId = getSelectedZone();
-    let parsedUpdates = parsedEntityUpdates();
+    let parsedUpdates = summarizedEntityUpdates();
     if (!parsedUpdates[zoneId]) {
       return [];
     }
@@ -386,10 +411,9 @@ export default function ZoneModel(props: ZoneDataProps) {
   });
 
   // Setup meshes for entities
-  let discreteEntityMeshes: ByZone<{ [entityKey: string]: THREE.InstancedMesh; }> = {};
   const mat = new THREE.MeshToonMaterial();
-  createEffect(() => {
-    cleanUpEntities();
+  const discreteEntityMeshes = createMemo(() => {
+    let discreteEntityMeshes: ByZone<{ [entityKey: string]: THREE.InstancedMesh; }> = {};
 
     for (const zoneId in props.entityUpdates) {
       const entities = (discreteEntityMeshes[zoneId] = discreteEntityMeshes[zoneId] || {});
@@ -402,6 +426,18 @@ export default function ZoneModel(props: ZoneDataProps) {
         entities[entityKey] = mesh;
       }
     }
+
+    onCleanup(() => {
+      for (const zoneId in discreteEntityMeshes) {
+        for (const entityKey in discreteEntityMeshes[zoneId]) {
+          const mesh = discreteEntityMeshes[zoneId][entityKey];
+          scene.remove(mesh);
+          cleanupNode(mesh);
+        }
+      }
+    });
+
+    return discreteEntityMeshes;
   });
 
   // Show entities at different points in time
@@ -411,14 +447,15 @@ export default function ZoneModel(props: ZoneDataProps) {
     }
 
     const zoneId = getSelectedZone();
-    const entities = discreteEntityMeshes[zoneId];
+    const meshes = discreteEntityMeshes()[zoneId];
     let obj = new THREE.Object3D();
+    const hideWidescan = !getShowWidescan();
     for (const entityKey in props.entityUpdates[zoneId]) {
       if (entitySettings[entityKey]?.hidden) {
         continue;
       }
 
-      const mesh = entities[entityKey];
+      const mesh = meshes[entityKey];
       const updates = props.entityUpdates[zoneId][entityKey];
 
       // Skip until first visible update
@@ -434,7 +471,7 @@ export default function ZoneModel(props: ZoneDataProps) {
           continue;
         }
 
-        if (!getShowWidescan() && update.kind == EntityUpdateKind.Widescan) {
+        if (hideWidescan && update.kind == EntityUpdateKind.Widescan) {
           // Widescan is hidden
           idx++;
           continue;
@@ -461,10 +498,10 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   // Show/hide zone meshes and associated entities
   createEffect(() => {
-    const parsedUpdates = parsedEntityUpdates();
-    for (const zoneId in zoneMeshes) {
+    const parsedUpdates = summarizedEntityUpdates();
+    for (const zoneId in zoneMeshes()) {
       const zoneIsVisible = parseInt(zoneId) == getSelectedZone();
-      zoneMeshes[zoneId].visible = zoneIsVisible;
+      zoneMeshes()[zoneId].visible = zoneIsVisible;
       if (!props.entityUpdates) {
         continue;
       }
@@ -486,7 +523,7 @@ export default function ZoneModel(props: ZoneDataProps) {
     for (const entityKey in entitySettings) {
       const entityId = parseInt(entityKey.split("-")[1]);
       const zoneId = (entityId >> 12) & 0x01ff;
-      discreteEntityMeshes[zoneId][entityKey].visible = getShowDiscrete() && !entitySettings[entityKey].hidden;
+      discreteEntityMeshes()[zoneId][entityKey].visible = getShowDiscrete() && !entitySettings[entityKey].hidden;
     }
   });
 
@@ -583,40 +620,11 @@ export default function ZoneModel(props: ZoneDataProps) {
   onCleanup(() => {
     window.removeEventListener("resize", resizeCanvas);
     cleanupNode(scene);
-    cleanUpZones(true);
-    cleanUpEntities(true);
     if (controls) {
       controls.dispose();
     }
     scene.clear();
   });
-
-  function cleanUpZones(forced = false) {
-    // Remove old zones that aren't needed anymore
-    for (const zoneId in zoneMeshes) {
-      if (!forced && props.zoneData[zoneId]) {
-        // This zone ID is still needed
-        continue;
-      }
-
-      console.log("Disposing zone " + zoneId);
-      const mesh = zoneMeshes[zoneId];
-      setZoneMeshes(parseInt(zoneId), null);
-      scene.remove(mesh);
-      cleanupNode(mesh);
-    }
-  }
-
-  function cleanUpEntities(forced = false) {
-    // Remove old entities
-    for (const zoneId in discreteEntityMeshes) {
-      for (const entityKey in discreteEntityMeshes[zoneId]) {
-        const mesh = discreteEntityMeshes[zoneId][entityKey];
-        scene.remove(mesh);
-        cleanupNode(mesh);
-      }
-    }
-  }
 
   const clock = new THREE.Clock();
   const stats = new Stats();
@@ -641,7 +649,7 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   function castRayOntoMesh(): Position | undefined {
     raycaster.setFromCamera(cameraMouse, camera);
-    const intersections = raycaster.intersectObjects([zoneMeshes[getSelectedZone()]]);
+    const intersections = raycaster.intersectObjects([zoneMeshes()[getSelectedZone()]]);
     if (intersections.length > 0) {
       return { x: intersections[0].point.x, y: intersections[0].point.y, z: intersections[0].point.z };
     }
@@ -687,8 +695,8 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   const currentEntityUpdates = createMemo(() => {
     const key = getSelectedZone();
-    if (key !== undefined && parsedEntityUpdates()) {
-      const updates = parsedEntityUpdates()[key];
+    if (key !== undefined && summarizedEntityUpdates()) {
+      const updates = summarizedEntityUpdates()[key];
       if (updates) {
         setDiscreteLowerTime(updates.firstTime);
         setDiscreteUpperTime(updates.lastTime);
@@ -942,7 +950,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       <Show when={props.entityUpdates}>
         <Show
           fallback={zoneSelector}
-          when={getSelectedZone() in parsedEntityUpdates()}
+          when={getSelectedZone() in summarizedEntityUpdates()}
         >
           <div class="flex flex-row my-2">
             <div class="m-auto h-full px-1 font-bold" style={{ "min-width": "6rem" }}>
@@ -1041,14 +1049,14 @@ export default function ZoneModel(props: ZoneDataProps) {
             headerElements={[
               rows => (
                 <button
-                  onClick={() => rows.forEach(v => setEntitySettings(v.entityKey, { hidden: false }))}
+                  onClick={() => batch(() => rows.forEach(v => setEntitySettings(v.entityKey, { hidden: false })))}
                 >
                   Show filtered
                 </button>
               ),
               rows => (
                 <button
-                  onClick={() => rows.forEach(v => setEntitySettings(v.entityKey, { hidden: true }))}
+                  onClick={() => batch(() => rows.forEach(v => setEntitySettings(v.entityKey, { hidden: true })))}
                 >
                   Hide filtered
                 </button>

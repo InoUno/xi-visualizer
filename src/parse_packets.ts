@@ -206,7 +206,7 @@ export class PacketParser {
 
     const pos: Position = {
       x: this.lastClientPosition.x + xOffset,
-      y: this.lastClientPosition.y - 10,
+      y: this.lastClientPosition.y,
       z: this.lastClientPosition.z + zOffset,
     };
 
