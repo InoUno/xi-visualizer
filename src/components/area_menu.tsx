@@ -25,6 +25,7 @@ export interface Area {
   polygon: Point[];
   holes?: Point[][];
   hidden?: boolean;
+  description?: string;
 }
 
 export default function AreaMenu(ps: AreaMenuProps) {
@@ -38,6 +39,10 @@ export default function AreaMenu(ps: AreaMenuProps) {
     }
     ps.setAreas(ps.selectedAreaIdx, "y", newNum);
     element.textContent = ps.areas[ps.selectedAreaIdx].y + "";
+  };
+
+  const setAreaDescription = (description: string) => {
+
   };
 
   const setActivePoints = (...args: any[]) => {
@@ -187,6 +192,9 @@ export default function AreaMenu(ps: AreaMenuProps) {
 
     let lines = [];
 
+    if (area.description) {
+      lines.push(`-- ${area.description.trim()}`);
+    }
     lines.push(`y = ${area.y},`);
     lines.push(`polygon = {`);
     for (const point of area.polygon) {
@@ -323,6 +331,7 @@ export default function AreaMenu(ps: AreaMenuProps) {
                   <IoExitOutline class="inline-block" title="Deselect current area"></IoExitOutline>
                 </span>
               </div>
+
               <Show when={ps.areas[ps.selectedAreaIdx].holes?.length > 0}>
                 <div>
                   <ul>
@@ -370,6 +379,20 @@ export default function AreaMenu(ps: AreaMenuProps) {
               >
                 Add hole
               </div>
+
+              <input
+                class="m-0 mt-2 p-0 px-2 font-mono text-lime-300 bg-transparent rounded-sm w-full"
+                placeholder="Area description"
+                onInput={e => {
+                  ps.setAreas(ps.selectedAreaIdx, "description", e.target.value);
+                }}
+                onFocusOut={e => {
+                  ps.setAreas(ps.selectedAreaIdx, "description", e.target.value?.trim());
+                }}
+                value={selectedArea()?.description ?? ""}
+              >
+              </input>
+
               <div class="py-2">
                 <span class="font-semibold">Y:</span>{" "}
                 <span
@@ -380,6 +403,7 @@ export default function AreaMenu(ps: AreaMenuProps) {
                   {selectedArea()?.y}
                 </span>
               </div>
+
               <div>
                 <div class="flex flex-row">
                   <span class="font-semibold flex-grow">Vertices (x, z)</span>
@@ -474,7 +498,7 @@ export default function AreaMenu(ps: AreaMenuProps) {
                   <li class="flex flex-row">
                     <span
                       class="px-0.5 align-bottom cursor-pointer"
-                      onClick={() => ps.setAreas(index(), "hidden", !ps.areas[index()].hidden)}
+                      onClick={() => ps.setAreas(index(), "hidden", !item.hidden)}
                     >
                       <Show
                         when={!item.hidden}
@@ -497,11 +521,20 @@ export default function AreaMenu(ps: AreaMenuProps) {
                       </Show>
                     </span>
                     <span
-                      class="text-blue-300 cursor-pointer hover:underline font-mono flex-grow"
+                      class="text-blue-300 cursor-pointer hover:underline font-mono whitespace-nowrap"
                       onClick={() => ps.setSelectedAreaIdx(index())}
                     >
                       Area {index() + 1}
                     </span>
+                    <Show when={item.description}>
+                      <div
+                        class="mx-3 text-gray-400 text-xs font-mono inline-block flex-grow whitespace-nowrap overflow-hidden"
+                        style={{ "align-content": "center", "text-overflow": "ellipsis" }}
+                        title={item.description}
+                      >
+                        [{item.description}]
+                      </div>
+                    </Show>
                     <span class="cursor-pointer px-1 align-bottom text-red-300 font-mono" onClick={() => deleteArea(index())}>
                       <IoTrash class="inline-block"></IoTrash>
                     </span>
@@ -537,6 +570,7 @@ const XZ_PATTERN = /^\{\s*x\s*=\s*(\-?\d+)\s*,\s*z\s*=\s*(\-?\d+),?\s*\}\s*,?/;
 const HOLES_PATTERN = /^holes\s*=\s*\{/;
 const START_BRACKET = /^\{/;
 const END_BRACKET = /^\},?/;
+const COMMENT_PATTERN = /--([^\r\n]+)\r?\n/;
 
 function skipWhitespaceAndComments(str: string): number {
   let idx = 0;
@@ -568,7 +602,9 @@ function skipWhitespaceAndComments(str: string): number {
 }
 
 /// Returns the number of characters to skip to proceed
-function parseAreaDef(str: string, areas: Area[]): number {
+function parseAreaDef(fullStr: string, startIdx: number, areas: Area[]): number {
+  const str = fullStr.substring(startIdx);
+
   // Parse y
   const yMatch = Y_PATTERN.exec(str);
   if (!yMatch) {
@@ -590,7 +626,7 @@ function parseAreaDef(str: string, areas: Area[]): number {
   idx += polygonMatch[0].length;
   idx += skipWhitespaceAndComments(str.substring(idx));
 
-  let area = {
+  let area: Area = {
     y,
     polygon: [],
   };
@@ -638,6 +674,24 @@ function parseAreaDef(str: string, areas: Area[]): number {
     }
     idx += endBracketMatch[0].length;
     idx += skipWhitespaceAndComments(str.substring(idx));
+  }
+
+  // Find description before startIdx
+  // Skip to start of line before startIdx
+  let descIdx = startIdx
+  while (descIdx >= 0 && fullStr[descIdx] != "\n") {
+    descIdx--;
+  }
+  descIdx--;
+  while (descIdx >= 0 && fullStr[descIdx] != "\n") {
+    descIdx--;
+  }
+  if (descIdx < 0) {
+    descIdx = 0;
+  }
+  const commentMatch = COMMENT_PATTERN.exec(fullStr.substring(descIdx, startIdx));
+  if (commentMatch) {
+    area.description = commentMatch[1].trim();
   }
 
   areas.push(area);
@@ -697,7 +751,7 @@ function parseAreasDef(str: string): Area[] | undefined {
   let i = 0;
   while (i < str.length) {
     if (str[i] == "y") {
-      i += parseAreaDef(str.substring(i), areas);
+      i += parseAreaDef(str, i, areas);
     } else {
       i++;
     }
