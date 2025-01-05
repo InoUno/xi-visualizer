@@ -526,14 +526,14 @@ export default function AreaMenu(ps: AreaMenuProps) {
                     >
                       Area {index() + 1}
                     </span>
-                    <Show when={item.description}>
-                      <div
+                    <Show when={item.description} fallback={<span class="flex-grow"></span>}>
+                      <span
                         class="mx-3 text-gray-400 text-xs font-mono inline-block flex-grow whitespace-nowrap overflow-hidden"
                         style={{ "align-content": "center", "text-overflow": "ellipsis" }}
                         title={item.description}
                       >
                         [{item.description}]
-                      </div>
+                      </span>
                     </Show>
                     <span class="cursor-pointer px-1 align-bottom text-red-300 font-mono" onClick={() => deleteArea(index())}>
                       <IoTrash class="inline-block"></IoTrash>
