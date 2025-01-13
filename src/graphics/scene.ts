@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-export function setupBaseScene(): [THREE.Scene, THREE.PerspectiveCamera] {
+export function setupBaseScene(): THREE.Scene {
   // Background
   const scene = new THREE.Scene();
   scene.scale.set(1, 1, -1); // FFXI mesh is flipped on the z-axis
@@ -17,9 +17,5 @@ export function setupBaseScene(): [THREE.Scene, THREE.PerspectiveCamera] {
   hemiLight.position.set(300, 1000, 300);
   scene.add(hemiLight);
 
-  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 5000);
-  camera.position.set(0, 1000, 0);
-  camera.lookAt(0, 0, 0);
-
-  return [scene, camera];
+  return scene;
 }

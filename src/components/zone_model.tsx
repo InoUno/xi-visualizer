@@ -1,10 +1,9 @@
 import CameraControls from "camera-controls";
 import { IoHelpCircle } from "solid-icons/io";
-import { batch, createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, mapArray, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import * as THREE from "three";
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
-import Stats from "three/addons/libs/stats.module.js";
 import { FlyControls, MapControls } from "three/examples/jsm/Addons.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { addCustomCameraControls, addMapControls, adjustCameraAspect, fitCameraToContents } from "../graphics/camera";
@@ -17,6 +16,9 @@ import AreaMenu, { Area, Point } from "./area_menu";
 import LookupInput from "./lookup_input";
 import RangeInput from "./range_input";
 import Table from "./table";
+
+// @ts-ignore
+import Stats from "three/addons/libs/stats.module.js";
 
 // Add the extension functions
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -145,7 +147,16 @@ export default function ZoneModel(props: ZoneDataProps) {
     return result;
   });
 
-  const [scene, camera] = setupBaseScene();
+  const scene = createMemo(() => {
+    return setupBaseScene();
+  })
+
+  const camera = createMemo(() => {
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 5000);
+    camera.position.set(0, 1000, 0);
+    camera.lookAt(0, 0, 0);
+    return camera;
+  })
 
   const raycaster = new THREE.Raycaster();
   raycaster.firstHitOnly = true;
@@ -154,11 +165,6 @@ export default function ZoneModel(props: ZoneDataProps) {
   const zoneMeshes = createMemo((prevZoneMeshes: ByZone<THREE.Mesh>) => {
     const zoneMeshes = {};
     for (const zoneId in props.zoneData) {
-      if (zoneId in prevZoneMeshes) {
-        // Mesh is already set up, so reuse it
-        zoneMeshes[zoneId] = prevZoneMeshes[zoneId];
-        continue;
-      }
 
       console.time("setup-mesh-" + zoneId);
       const buffer = props.zoneData[zoneId].mesh;
@@ -210,20 +216,15 @@ export default function ZoneModel(props: ZoneDataProps) {
 
       zoneMeshes[parseInt(zoneId)] = mesh;
 
-      scene.add(mesh);
+      scene().add(mesh);
       console.timeEnd("setup-mesh-" + zoneId);
     }
 
     onCleanup(() => {
       for (const zoneId in zoneMeshes) {
-        if (props.zoneData[zoneId]) {
-          // This zone ID is still needed
-          continue;
-        }
-
         console.log("Disposing zone " + zoneId);
         const mesh = zoneMeshes[zoneId];
-        scene.remove(mesh);
+        scene().remove(mesh);
         cleanupNode(mesh);
       }
     });
@@ -415,7 +416,7 @@ export default function ZoneModel(props: ZoneDataProps) {
         transparent: true,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      scene.add(mesh);
+      scene().add(mesh);
 
       const mixer = new THREE.AnimationMixer(mesh);
       mixer.timeScale = 1;
@@ -452,7 +453,7 @@ export default function ZoneModel(props: ZoneDataProps) {
         color: clientColor,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      scene.add(mesh);
+      scene().add(mesh);
 
       const mixer = new THREE.AnimationMixer(mesh);
       mixer.timeScale = 1;
@@ -467,7 +468,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       for (const mixer of mixers) {
         const mesh = mixer.getRoot() as THREE.Mesh;
         cleanupNode(mesh);
-        scene.remove(mesh);
+        scene().remove(mesh);
       }
     });
     return mixers;
@@ -485,7 +486,7 @@ export default function ZoneModel(props: ZoneDataProps) {
         const updates = adjustedEntityUpdates()[zoneId][entityKey];
         const mesh = new THREE.InstancedMesh(geo, mat, updates.length);
 
-        scene.add(mesh);
+        scene().add(mesh);
         entities[entityKey] = mesh;
       }
     }
@@ -494,7 +495,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       for (const zoneId in discreteEntityMeshes) {
         for (const entityKey in discreteEntityMeshes[zoneId]) {
           const mesh = discreteEntityMeshes[zoneId][entityKey];
-          scene.remove(mesh);
+          scene().remove(mesh);
           cleanupNode(mesh);
         }
       }
@@ -672,7 +673,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       }
     });
 
-    controls = addMapControls(camera, canvasElement);
+    controls = addMapControls(camera(), canvasElement);
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true, alpha: true });
     const labelRenderer = new CSS2DRenderer({ element: labelRendererElement });
@@ -682,11 +683,12 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   onCleanup(() => {
     window.removeEventListener("resize", resizeCanvas);
-    cleanupNode(scene);
+    cleanupNode(scene());
     if (controls) {
       controls.dispose();
     }
-    scene.clear();
+    scene().clear();
+    camera().clear();
   });
 
   const clock = new THREE.Clock();
@@ -709,7 +711,7 @@ export default function ZoneModel(props: ZoneDataProps) {
   }
 
   function castRayOntoMesh(): Position | undefined {
-    raycaster.setFromCamera(cameraMouse, camera);
+    raycaster.setFromCamera(cameraMouse, camera());
     const intersections = raycaster.intersectObjects([zoneMeshes()[getSelectedZone()]]);
     if (intersections.length > 0) {
       return { x: intersections[0].point.x, y: intersections[0].point.y, z: intersections[0].point.z };
@@ -728,7 +730,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       const height = canvas.clientHeight;
       renderer.setSize(width, height, false);
       labelRenderer.setSize(width, height);
-      adjustCameraAspect(camera, canvasElement);
+      adjustCameraAspect(camera(), canvasElement);
       setNeedsResize(false);
     }
 
@@ -744,8 +746,8 @@ export default function ZoneModel(props: ZoneDataProps) {
       }
     }
 
-    renderer.render(scene, camera);
-    labelRenderer.render(scene, camera);
+    renderer.render(scene(), camera());
+    labelRenderer.render(scene(), camera());
   }
 
   createEffect(() => {
@@ -841,7 +843,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       }
 
       meshes.push(mesh);
-      scene.add(mesh);
+      scene().add(mesh);
     }
 
     onCleanup(() => {
@@ -853,7 +855,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       }
       for (const mesh of meshes) {
         cleanupNode(mesh);
-        scene.remove(mesh);
+        scene().remove(mesh);
       }
     });
   });
@@ -903,7 +905,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       labels.push(label);
 
       meshes.push(mesh);
-      scene.add(mesh);
+      scene().add(mesh);
     }
 
     onCleanup(() => {
@@ -915,7 +917,7 @@ export default function ZoneModel(props: ZoneDataProps) {
       }
       for (const mesh of meshes) {
         cleanupNode(mesh);
-        scene.remove(mesh);
+        scene().remove(mesh);
       }
     });
   });

@@ -11,7 +11,7 @@ import { decompress, fetchProgress } from "../util";
 interface PacketPageProps {
 }
 
-export default function PacketPage({}: PacketPageProps) {
+export default function PacketPage({ }: PacketPageProps) {
   const [getParsedPackets, setParsedPackets] = createSignal<PacketParser | undefined>(undefined);
   const [getZoneModels, setZoneModels] = createSignal<ByZone<ZoneData> | undefined>(undefined);
   const [getStatus, setStatus] = createSignal<string | undefined>();
@@ -115,12 +115,12 @@ export default function PacketPage({}: PacketPageProps) {
           <div>{getStatus()}</div>
           <pre>
             {getZoneIds().map(zoneId => {
-                const progress = zoneProgress[zoneId];
-                if (progress) {
-                  return <span>{progress}</span>
-                } else {
-                  return <></>;
-                }
+              const progress = zoneProgress[zoneId];
+              if (progress) {
+                return <div>{progress}</div>
+              } else {
+                return <></>;
+              }
             })}
           </pre>
         </Match>
