@@ -57,40 +57,49 @@ export type ZoneEntityUpdates = {
 const enc = new TextDecoder("utf-8");
 
 export class PacketParser {
-  private lines: string[];
+  public pendingContent: string = "";
+  public zoneEntityUpdates: ZoneEntityUpdates = {};
+  public clientUpdates: PositionUpdate[] = [];
 
-  public zoneEntityUpdates: ZoneEntityUpdates;
-  public clientUpdates: PositionUpdate[];
-
+  private decoder: TextDecoder = new TextDecoder();
   private lastClientPosition: Position;
-  private currentShownEntities: { [entityKey: string]: { time: number; pos: Position; }; };
+  private currentShownEntities: { [entityKey: string]: { time: number; pos: Position; }; } = {};
   private currentZoneId: number = 0;
 
-  constructor(content: string) {
-    console.time("line-splitting");
-    this.lines = content.split("\n");
-    console.timeEnd("line-splitting");
-  }
+  public parsePackets(stringBytes?: Uint8Array) {
+    let content = this.pendingContent;
 
-  public parsePackets() {
+    if (stringBytes) {
+      console.time("decoding")
+      // If more bytes were given, append it to the current content string
+      content += this.decoder.decode(stringBytes, { stream: true });
+
+      // Find the start of the last packet in the current content, and cut it off for next round of call to parseBytes
+      let lastPacketStart = content.lastIndexOf("\n[")
+      this.pendingContent = content.slice(lastPacketStart);
+      content = content.slice(0, lastPacketStart);
+      console.timeEnd("decoding")
+    }
+
+    const lines = content.split("\n");
+
     console.time("parse-packets");
-    this.zoneEntityUpdates = {};
-    this.clientUpdates = [];
-    this.currentShownEntities = {};
     let packetCount = 0;
 
-    for (let i = 0; i < this.lines.length; i++) {
-      if (PACKET_START.test(this.lines[i])) {
+    for (let i = 0; i < lines.length; i++) {
+      if (PACKET_START.test(lines[i])) {
         let start = i;
         i++;
-        while (i < this.lines.length && !PACKET_START.test(this.lines[i])) {
+        while (i < lines.length && !PACKET_START.test(lines[i])) {
           i++;
         }
-        this.parsePacket(this.lines.slice(start, i));
+        this.parsePacket(lines.slice(start, i));
         packetCount++;
         i--;
       }
     }
+
+    console.log(`Extracted ${packetCount} packets`);
     console.timeEnd("parse-packets");
   }
 
