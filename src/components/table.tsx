@@ -21,6 +21,7 @@ type HeaderElement<T> = JSX.Element | ((rows: T[], filterFns: FilterFns<T>, setF
 
 interface TableProps<T extends { [key in Column]: any; }, Column extends keyof T> {
   inputRows: T[];
+  initialFilterFns?: (setFilterFns: FilterFnsSetter<T>) => any;
   headerElements?: HeaderElement<T>[][];
   additionalColumns?: AdditionalColumn<T>[];
   columns: ColumnDef<T, Column>[];
@@ -37,6 +38,10 @@ export default function Table<
   const [sortAsc, setSortAsc] = createSignal<boolean>(ps.defaultSortAsc ?? true);
   const [filterBy, setFilterBy] = createSignal<string>("");
   const [filterFns, setFilterFns] = createStore<FilterFns<T>>({});
+
+  if (ps.initialFilterFns) {
+    ps.initialFilterFns(setFilterFns);
+  }
 
   const colsByKey = createMemo(() => {
     let byKey: { [key: string]: ColumnDef<T, Column> } = {}

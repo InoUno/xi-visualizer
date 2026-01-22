@@ -1517,6 +1517,15 @@ export default function ZoneModel(props: ZoneDataProps) {
       </ul>
     </div>;
 
+  const staticFilterFn = (setFilterFns) => {
+    setFilterFns(produce(fs => {
+      fs["static"] = (r: EntityRow): boolean => {
+        const index = parseInt(r.index);
+        return index < 0x400;
+      };
+    }))
+  }
+
   return (
     <div classList={{ "zone_model_layout": !!props.entityUpdates }}>
 
@@ -1665,6 +1674,7 @@ export default function ZoneModel(props: ZoneDataProps) {
                 hidden: !entitySettings[v.entityKey]?.hidden,
               });
             }}
+            initialFilterFns={staticFilterFn}
             headerElements={[
               [
                 zoneSelector,
@@ -1684,12 +1694,7 @@ export default function ZoneModel(props: ZoneDataProps) {
                           }));
                         } else {
                           // Add filter
-                          setFilterFns(produce(fs => {
-                            fs["static"] = (r: EntityRow): boolean => {
-                              const index = parseInt(r.index);
-                              return index < 0x400;
-                            };
-                          }));
+                          staticFilterFn(setFilterFns);
                         }
                       }} />
                   </div>
