@@ -1612,14 +1612,16 @@ export default function ZoneModel(props: ZoneDataProps) {
         </Show>
 
         {/* Settings and help menu */}
-        <div class="absolute bottom-0 left-0 pointer-events-none flex flex-row" style={{ width: "40%" }}>
+        <div class="absolute bottom-0 left-0 pointer-events-none">
           <Switch>
             <Match when={getMenuPopup() == MenuPopup.None}>
-              <div class="pointer-events-auto cursor-pointer p-1" onClick={() => setMenuPopup(MenuPopup.Settings)}>
-                <IoSettings size={20} title="Settings"></IoSettings>
-              </div>
-              <div class="pointer-events-auto cursor-pointer p-1" onClick={() => setMenuPopup(MenuPopup.Help)}>
-                <IoHelpCircle size={20} title="Mouse and keyboard help"></IoHelpCircle>
+              <div class="flex flex-row bg-black bg-opacity-50" style={{ "border-top-right-radius": "0.5rem" }}>
+                <div class="pointer-events-auto cursor-pointer p-1" onClick={() => setMenuPopup(MenuPopup.Settings)}>
+                  <IoSettings size={20} title="Settings"></IoSettings>
+                </div>
+                <div class="pointer-events-auto cursor-pointer p-1" onClick={() => setMenuPopup(MenuPopup.Help)}>
+                  <IoHelpCircle size={20} title="Mouse and keyboard help"></IoHelpCircle>
+                </div>
               </div>
             </Match>
             <Match when={getMenuPopup() == MenuPopup.Settings}>{settingsMenu}</Match>
