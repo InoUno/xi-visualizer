@@ -1407,9 +1407,6 @@ export default function ZoneModel(props: ZoneDataProps) {
         for (const entityKey in entityPaths) {
           if (!entitySettings[entityKey]?.hidden) {
             const paths = entityPaths[entityKey]
-            if (paths.showLines) {
-              fn(paths.lines)
-            }
             if (paths.showPoints) {
               fn(paths.pointMesh)
             }
