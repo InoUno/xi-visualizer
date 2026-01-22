@@ -99,13 +99,13 @@ export class DynamicLineSegments extends THREE.LineSegments {
     setDrawRange(startIdx: number, endIdx: number) {
         this.drawStart = this.idxToPosition[startIdx]
         this.drawEnd = this.idxToPosition[endIdx];
-        this.geometry.setDrawRange(this.drawStart ?? 0, this.drawEnd ?? this.count);
+        this.geometry.setDrawRange(this.drawStart ?? 0, (this.drawEnd ?? this.count) - (this.drawStart ?? 0));
         this.geometry.computeBoundingSphere();
     }
 
     private updateGraphics() {
         this.geometry.attributes.position.needsUpdate = true;
-        this.geometry.setDrawRange(this.drawStart ?? 0, this.drawEnd ?? this.count);
+        this.geometry.setDrawRange(this.drawStart ?? 0, (this.drawEnd ?? this.count) - (this.drawStart ?? 0));
         this.geometry.computeBoundingSphere()
     }
 
