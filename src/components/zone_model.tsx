@@ -1739,6 +1739,7 @@ export default function ZoneModel(props: ZoneDataProps) {
                   onChange={(lower, upper) => {
                     setNewDiscrete([lower, upper]);
                   }}
+                  nudge={true}
                   disabled={!updatesSettings.show.discrete}
                 >
                 </RangeInput>

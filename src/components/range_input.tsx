@@ -1,4 +1,5 @@
-import { createMemo, createSignal, mergeProps } from "solid-js";
+import { batch, createMemo, createSignal, mergeProps, Show } from "solid-js";
+import { CgPushChevronLeftR, CgPushChevronRightR } from "solid-icons/cg";
 import "./range_input.css";
 
 interface RangeInputProps {
@@ -13,6 +14,7 @@ interface RangeInputProps {
   onChangeUpper?: (upper: number) => any;
   inputKind?: "number" | "timestamp";
   disabled?: boolean;
+  nudge?: boolean;
 }
 
 interface DragStartInfo {
@@ -57,9 +59,9 @@ export default function RangeInput(props: RangeInputProps) {
 
   let valueTransforms = createMemo(() => {
     let transforms = {
-      fromNum: x => x,
-      toNum: x => x,
-      numRounding: x => x,
+      fromNum: (x: number) => x as any as string,
+      toNum: (x: string) => x as any as number,
+      numRounding: (x: number) => x as number,
     };
     if (ps.inputKind == "timestamp") {
       // Determine if datetime is needed or just time.
@@ -117,7 +119,7 @@ export default function RangeInput(props: RangeInputProps) {
     ps.onChange(ps.lower, newUpper);
   };
 
-  let invisibleElement; // Used to hide drag ghost image
+  let invisibleElement: HTMLDivElement; // Used to hide drag ghost image
   const onDragStart = (e: DragEventInit) => {
     e.dataTransfer.setDragImage(invisibleElement, 0, 0); // Hide drag ghost image
     setStartDrag({
@@ -139,13 +141,51 @@ export default function RangeInput(props: RangeInputProps) {
     const valuePerPixel = diff() / barLength;
     const valueChange = valueTransforms().numRounding(movedDist * valuePerPixel);
     if (valueChange > 0) {
-      updateUpper(dragInfo.startMax + valueChange);
-      updateLower(dragInfo.startMin + valueChange);
+      batch(() => {
+        updateUpper(dragInfo.startMax + valueChange);
+        updateLower(dragInfo.startMin + valueChange);
+      })
     } else {
-      updateLower(dragInfo.startMin + valueChange);
-      updateUpper(dragInfo.startMax + valueChange);
+      batch(() => {
+        updateLower(dragInfo.startMin + valueChange);
+        updateUpper(dragInfo.startMax + valueChange);
+      })
     }
   };
+
+  const eventToScalar = (e: { shiftKey: boolean, ctrlKey: boolean }) => {
+    if (e.ctrlKey) {
+      return 60;
+    }
+
+    if (e.shiftKey) {
+      return 10;
+    }
+
+    return 1;
+  }
+
+  const nudgeLeft = (scalar: number = 1) => {
+    batch(() => {
+      updateLower(ps.lower - defaultStep() * scalar);
+      updateUpper(ps.upper - defaultStep() * scalar);
+    })
+  }
+
+  const nudgeRight = (scalar: number = 1) => {
+    batch(() => {
+      updateLower(ps.lower + defaultStep() * scalar);
+      updateUpper(ps.upper + defaultStep() * scalar);
+    })
+  }
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key == "ArrowLeft") {
+      nudgeLeft(eventToScalar(e))
+    } else if (e.key == "ArrowRight") {
+      nudgeRight(eventToScalar(e))
+    }
+  }
 
   return (
     <div class="range-input flex flex-row">
@@ -159,18 +199,30 @@ export default function RangeInput(props: RangeInputProps) {
         disabled={ps.disabled}
       />
 
-      <div class="slider flex-grow m-auto mr-2">
+      <Show when={ps.nudge}>
+        <div
+          class="cursor-pointer outline-none m-auto mr-1"
+          onClick={(e) => nudgeLeft(eventToScalar(e))}
+          onKeyDown={onKeyDown}
+          tabIndex={0}>
+          <CgPushChevronLeftR size={20} />
+        </div>
+      </Show>
+
+      <div class="slider flex-grow my-auto">
         {
           // Used to hide drag ghost image of the bar
           <div ref={invisibleElement} class="hidden"></div>
         }
         <div
-          class="range-span"
+          class="range-span outline-none"
           classList={{ "cursor-move": !ps.disabled, "disabled": ps.disabled }}
           style={{ left: leftPct(), right: rightPct() }}
           draggable={!ps.disabled}
           onDragStart={onDragStart}
           onDrag={onDrag}
+          tabIndex={0}
+          onKeyDown={onKeyDown}
         >
         </div>
 
@@ -199,6 +251,16 @@ export default function RangeInput(props: RangeInputProps) {
           disabled={ps.disabled}
         />
       </div>
+
+      <Show when={ps.nudge}>
+        <div
+          class="cursor-pointer outline-none my-auto ml-1"
+          onClick={(e) => nudgeRight(eventToScalar(e))}
+          onKeyDown={onKeyDown}
+          tabIndex={0}>
+          <CgPushChevronRightR size={20} />
+        </div>
+      </Show>
 
       <input
         type={inputType()}
