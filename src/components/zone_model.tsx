@@ -6,14 +6,14 @@ import Stats from "three/addons/libs/stats.module.js";
 import * as THREE from "three";
 
 import { IoHelpCircle, IoSettings } from "solid-icons/io";
-import { batch, createEffect, createMemo, createSignal, For, mapArray, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { createMutable, createStore, produce, SetStoreFunction, unwrap } from "solid-js/store";
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
 import { MapControls } from "three/examples/jsm/Addons.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { addMapControls, adjustCameraAspect, fitCameraToContents } from "../graphics/camera";
 import { setupBaseScene } from "../graphics/scene";
-import { cleanupNode, ROT_TO_RADIANS, roundDecimals } from "../graphics/util";
+import { cleanupNode, roundDecimals } from "../graphics/util";
 import { EntityUpdate, EntityUpdateKind, Position, PositionUpdate, ZoneEntityUpdates, type EntityUpdates } from "../parse_packets";
 import { ByZone } from "../types";
 import { binarySearchLower, deepMerge } from "../util";
@@ -26,7 +26,6 @@ import { ZoneInfoBox, TargetInfo } from "./zone_info_box";
 import { ZoneRayTestingBox } from "./zone_ray_testing_box";
 import PathNodes from "./path_nodes";
 import SelectionBox, { type SelectionBoxResult } from "./selection_box";
-import { parsePath, PathPartKind, type PathPart } from "../parse_path";
 import EntityPaths, { type EntityPathMap } from "./entity_paths";
 
 

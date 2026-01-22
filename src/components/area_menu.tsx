@@ -1,5 +1,5 @@
 import { IoCheckmarkDoneSharp, IoChevronDown, IoChevronUp, IoCopy, IoExitOutline, IoEye, IoEyeOff, IoLocate, IoTrash } from "solid-icons/io";
-import { batch, createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createEffect, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { createStore, produce, SetStoreFunction } from "solid-js/store";
 
 export interface AreaMenuProps {

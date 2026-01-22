@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, mergeProps } from "solid-js";
+import { createMemo, createSignal, mergeProps } from "solid-js";
 import "./range_input.css";
 
 interface RangeInputProps {
@@ -32,9 +32,9 @@ export default function RangeInput(props: RangeInputProps) {
     minDiff: defaultStep(),
     lower: Math.round(props.min + diff() / 100 * 25),
     upper: Math.round(props.min + diff() / 100 * 75),
-    onChange: () => {},
-    onChangeLower: () => {},
-    onChangeUpper: () => {},
+    onChange: () => { },
+    onChangeLower: () => { },
+    onChangeUpper: () => { },
   }, props);
 
   const [getStartDrag, setStartDrag] = createSignal<DragStartInfo | undefined>(undefined);

@@ -1,5 +1,5 @@
 import * as THREE from "three"
-import { createEffect, createMemo, onCleanup, type Setter } from "solid-js"
+import { createEffect, onCleanup, type Setter } from "solid-js"
 
 import { ROT_TO_RADIANS } from "../graphics/util"
 import { InstancedMesh2, type InstancedEntity } from "@three.ez/instanced-mesh"

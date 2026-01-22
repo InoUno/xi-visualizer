@@ -1,5 +1,5 @@
 import fusejs from "fuse.js";
-import { createMemo, createSignal, For, JSX, onMount, type Setter } from "solid-js";
+import { createMemo, createSignal, For, JSX, onMount } from "solid-js";
 import { createStore, type SetStoreFunction } from "solid-js/store";
 
 interface AdditionalColumn<T> {
