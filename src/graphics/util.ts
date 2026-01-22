@@ -139,3 +139,5 @@ export function castRay(start: THREE.Vector3Like, end: THREE.Vector3Like, object
   }
   return result;
 }
+
+export const ROT_TO_RADIANS = Math.PI * 2 / 256;

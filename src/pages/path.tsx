@@ -23,15 +23,33 @@ export default function PacketPage({ }: PathPageProps) {
 
   const [getSelectedEntity, setSelectedEntity] = createSignal<EntityInfo | undefined>();
 
-  function parseFile(file: File) {
-    setStatus("Parsing packets");
-    const reader = new FileReader();
-    reader.onload = e => {
-      const parser = new PacketParser(e.target.result as string);
-      parser.parsePackets();
+  async function parseFile(file: File) {
+    setStatus("Loading and parsing packets");
+    const stream = file.stream();
+    const reader = stream.getReader();
+
+    const parser = new PacketParser();
+    let totalSize = 0;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          parser.parsePackets();
+          break;
+        }
+
+        totalSize += value.length;
+        parser.parsePackets(value);
+      }
+
       setParsedPackets(parser);
-    };
-    reader.readAsText(file);
+    } catch (error) {
+      setStatus("Error reading stream: " + error);
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   const onDrop = (acceptedFiles: File[]) => {

@@ -7,7 +7,7 @@ import { InstancedMesh2 } from "@three.ez/instanced-mesh";
 import { TargetedSelectionBox } from '../graphics/selection';
 import { db } from '../localdb/db';
 import type { SelectionBoxResult } from './selection_box';
-import { DynamicLineSegments } from "../graphics/dynamic_lines";
+import { DynamicLineSegments } from "../graphics/dynamic_line_segments";
 
 export interface PathNodesProps {
   scene: THREE.Scene,

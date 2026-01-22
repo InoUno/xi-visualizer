@@ -1,5 +1,6 @@
 import fusejs from "fuse.js";
-import { createMemo, createSignal, For, JSX, onMount } from "solid-js";
+import { createMemo, createSignal, For, JSX, onMount, type Setter } from "solid-js";
+import { createStore, type SetStoreFunction } from "solid-js/store";
 
 interface AdditionalColumn<T> {
   name: string;
@@ -13,11 +14,14 @@ interface ColumnDef<T extends { [key in Column]: any; }, Column extends keyof T>
   defaultSortAsc?: boolean;
 }
 
-type HeaderElement<T> = JSX.Element | ((rows: T[]) => JSX.Element);
+type FilterFns<T> = { [key: string]: (t: T) => boolean };
+type FilterFnsSetter<T> = SetStoreFunction<FilterFns<T>>;
+
+type HeaderElement<T> = JSX.Element | ((rows: T[], filterFns: FilterFns<T>, setFilterFns: FilterFnsSetter<T>) => JSX.Element);
 
 interface TableProps<T extends { [key in Column]: any; }, Column extends keyof T> {
   inputRows: T[];
-  headerElements?: HeaderElement<T>[];
+  headerElements?: HeaderElement<T>[][];
   additionalColumns?: AdditionalColumn<T>[];
   columns: ColumnDef<T, Column>[];
   defaultSortColumn: Column;
@@ -32,6 +36,7 @@ export default function Table<
   const [sortBy, setSortBy] = createSignal<Column>(ps.defaultSortColumn);
   const [sortAsc, setSortAsc] = createSignal<boolean>(ps.defaultSortAsc ?? true);
   const [filterBy, setFilterBy] = createSignal<string>("");
+  const [filterFns, setFilterFns] = createStore<FilterFns<T>>({});
 
   const colsByKey = createMemo(() => {
     let byKey: { [key: string]: ColumnDef<T, Column> } = {}
@@ -64,13 +69,18 @@ export default function Table<
   });
 
   const rows = createMemo(() => {
-    let sortedRows;
+    let sortedRows: T[];
     if (filterBy()) {
       sortedRows = fuseIndex()
         .search(filterBy())
         .map(e => e.item);
     } else {
       sortedRows = [...ps.inputRows];
+    }
+
+    for (const filterFnKey in filterFns) {
+      const filterFn = filterFns[filterFnKey];
+      sortedRows = sortedRows.filter(filterFn);
     }
 
     sortedRows.sort((a, b) => {
@@ -95,16 +105,23 @@ export default function Table<
 
   return (
     <div class="flex flex-col h-full w-full">
-      <div class="flex flex-row space-x-5 mt-2">
+      <div class="flex flex-row space-x-2 mt-2 mx-2">
         <input
-          class="m-1"
           placeholder="Filter"
           ref={inputRef!}
           oninput={e => setFilterBy(e.target.value ?? "")}
         />
 
-        {ps.headerElements.map(element => element instanceof Function ? element(rows()) : element)}
+        {/* Place first extra header elements on the same row as the string filter input */}
+        {ps.headerElements[0].map(element => element instanceof Function ? element(rows(), filterFns, setFilterFns) : element)}
       </div>
+
+      {/* Next rows of header elements are put on the following rows */}
+      {ps.headerElements.slice(1).map(headerRowElements => (
+        <div class="flex flex-row space-x-2 mt-2 mx-2">
+          {headerRowElements.map(element => element instanceof Function ? element(rows(), filterFns, setFilterFns) : element)}
+        </div>
+      ))}
 
       <div class="flex-grow m-1 overflow-y-auto">
         <table class="w-full">
@@ -149,6 +166,6 @@ export default function Table<
           </tbody>
         </table>
       </div>
-    </div>
+    </div >
   );
 }

@@ -3,9 +3,12 @@ import * as THREE from 'three';
 export class DynamicLineSegments extends THREE.LineSegments {
     private count: number;
     private buffer: ArrayBuffer;
-    private idToPosition: Map<number, number> = new Map();
+    private idxToPosition: Map<number, number> = new Map();
     private positionToId: Map<number, number> = new Map();
-    private nextLineId: number = 0;
+    private nextLineIdx: number = 0;
+
+    private drawStart: number | undefined;
+    private drawEnd: number | undefined;
 
     constructor(material: THREE.Material, initialPoints = 100) {
         // Setup the buffer (3 floats per vertex, 2 vertices per line, 4 bytes per float)
@@ -28,31 +31,44 @@ export class DynamicLineSegments extends THREE.LineSegments {
         this.buffer = buffer;
     }
 
-    addLine(start: THREE.Vector3Like, end: THREE.Vector3Like): number {
+    addLine(start: THREE.Vector3Like, end: THREE.Vector3Like, doUpdateGraphics: boolean = true): number {
         const attr = this.geometry.attributes.position;
-        const requiredIndices = (this.count + 2);
+        const requiredIndices = this.count + 2;
 
         if (requiredIndices > attr.array.length / 3) {
-            this._growBuffer();
+            this.growBuffer();
         }
 
         attr.setXYZ(this.count, start.x, start.y, start.z);
         attr.setXYZ(this.count + 1, end.x, end.y, end.z);
 
-        const lineId = this.nextLineId++;
-        this.idToPosition[lineId] = this.count;
-        this.positionToId[this.count] = lineId;
+        const lineIdx = this.nextLineIdx++;
+        this.idxToPosition[lineIdx] = this.count;
+        this.positionToId[this.count] = lineIdx;
         this.count += 2;
 
-        attr.needsUpdate = true;
-        this.geometry.setDrawRange(0, this.count);
-        this.geometry.computeBoundingSphere()
+        if (doUpdateGraphics) {
+            this.updateGraphics()
+        }
 
-        return lineId;
+        return lineIdx;
     }
 
-    removeLine(lineId: number): boolean {
-        const position = this.idToPosition.get(lineId)
+    addLineSegments(points: THREE.Vector3Like[], doUpdateGraphics: boolean = true): number[] {
+        const indices = []
+        for (let i = 0; i < points.length - 1; i++) {
+            indices.push(this.addLine(points[i], points[i + 1], false))
+        }
+
+        if (doUpdateGraphics) {
+            this.updateGraphics()
+        }
+
+        return indices
+    }
+
+    removeLine(lineIdx: number): boolean {
+        const position = this.idxToPosition.get(lineIdx)
         if (!position) {
             return false;
         }
@@ -67,21 +83,33 @@ export class DynamicLineSegments extends THREE.LineSegments {
 
             // Update mappings
             const lastId = this.positionToId[lastPosition];
-            this.idToPosition[lastId] = position;
+            this.idxToPosition[lastId] = position;
             this.positionToId[position] = lastId
         }
 
-        this.idToPosition.delete(lineId);
+        this.idxToPosition.delete(lineIdx);
         this.positionToId.delete(lastPosition);
         this.count -= 2;
 
-        this.geometry.setDrawRange(0, this.count);
-        attr.needsUpdate = true;
+        this.updateGraphics();
 
         return true;
     }
 
-    private _growBuffer() {
+    setDrawRange(startIdx: number, endIdx: number) {
+        this.drawStart = this.idxToPosition[startIdx]
+        this.drawEnd = this.idxToPosition[endIdx];
+        this.geometry.setDrawRange(this.drawStart ?? 0, this.drawEnd ?? this.count);
+        this.geometry.computeBoundingSphere();
+    }
+
+    private updateGraphics() {
+        this.geometry.attributes.position.needsUpdate = true;
+        this.geometry.setDrawRange(this.drawStart ?? 0, this.drawEnd ?? this.count);
+        this.geometry.computeBoundingSphere()
+    }
+
+    private growBuffer() {
         const currentByteLength = this.buffer.byteLength;
         let newByteLength = currentByteLength * 2;
 
@@ -91,7 +119,7 @@ export class DynamicLineSegments extends THREE.LineSegments {
             const nextMax = this.buffer.maxByteLength * 2;
             this.buffer = this.buffer.transfer ?
                 this.buffer.transfer(newByteLength) :
-                this._manualTransfer(newByteLength, nextMax);
+                this.manualTransfer(newByteLength, nextMax);
         }
 
         const newArray = new Float32Array(this.buffer);
@@ -104,7 +132,7 @@ export class DynamicLineSegments extends THREE.LineSegments {
         this.geometry.computeBoundingSphere()
     }
 
-    private _manualTransfer(newSize: number, nextMax: number): ArrayBuffer {
+    private manualTransfer(newSize: number, nextMax: number): ArrayBuffer {
         const newBuf = new ArrayBuffer(newSize, { maxByteLength: nextMax });
         new Uint8Array(newBuf).set(new Uint8Array(this.buffer));
         return newBuf;

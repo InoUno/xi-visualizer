@@ -49,6 +49,10 @@ input:focus {
         focus:outline-none;
   }
 
+  label, input[type="checkbox"] {
+    cursor: inherit;
+  }
+
   table {
     @apply text-left w-full;
   }

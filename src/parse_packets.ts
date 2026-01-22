@@ -156,6 +156,21 @@ export class PacketParser {
       levels: [],
     };
 
+    // Skip entity updates with the hide flag
+    const flags = this.extractU32(lines, 0x20)
+    if (flags & 2) {
+      // Despawn if it's currently being shown
+      if (this.currentShownEntities[entityKey]) {
+        delete this.currentShownEntities[entityKey];
+        const update = {
+          kind: EntityUpdateKind.Despawn as EntityUpdateKind.Despawn,
+          time: timestamp,
+        };
+        entity.updates.push(update);
+      }
+      return;
+    }
+
     const updateMask = this.extractByte(lines, 0x0A);
     if ((updateMask & 0x20) > 0 && this.currentShownEntities[entityKey]) {
       // Despawn packet

@@ -13,7 +13,7 @@ import { MapControls } from "three/examples/jsm/Addons.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { addMapControls, adjustCameraAspect, fitCameraToContents } from "../graphics/camera";
 import { setupBaseScene } from "../graphics/scene";
-import { cleanupNode, roundDecimals } from "../graphics/util";
+import { cleanupNode, ROT_TO_RADIANS, roundDecimals } from "../graphics/util";
 import { EntityUpdate, EntityUpdateKind, Position, PositionUpdate, ZoneEntityUpdates, type EntityUpdates } from "../parse_packets";
 import { ByZone } from "../types";
 import { binarySearchLower, deepMerge } from "../util";
@@ -24,9 +24,10 @@ import Table from "./table";
 import { ColorKind, colorMesh, createZoneMesh, getHitData, getMapId, markLineCollisions, prepareMeshData, RayHit } from "../graphics/ximesh";
 import { ZoneInfoBox, TargetInfo } from "./zone_info_box";
 import { ZoneRayTestingBox } from "./zone_ray_testing_box";
-import { parsePath, PathPart, PathPartKind } from "../parse_path";
 import PathNodes from "./path_nodes";
 import SelectionBox, { type SelectionBoxResult } from "./selection_box";
+import { parsePath, PathPartKind, type PathPart } from "../parse_path";
+import EntityPaths, { type EntityPathMap } from "./entity_paths";
 
 
 // Add the extension functions
@@ -58,15 +59,17 @@ interface EntityUpdatesSettings {
     rendered: boolean,
     widescan: boolean,
     paths: boolean,
-    pathKinds: {
-      start: boolean,
-      preturn: boolean,
-      turn: boolean,
-      end: boolean,
-      interrupt: boolean,
-      lines: boolean,
-    }
+    pathKinds: EntityPathKindsSettings
   }
+}
+
+export interface EntityPathKindsSettings {
+  start: boolean,
+  preturn: boolean,
+  turn: boolean,
+  end: boolean,
+  interrupt: boolean,
+  lines: boolean,
 }
 
 type ZoneModelSettingsDefault = Partial<ZoneModelSettings>;
@@ -391,15 +394,12 @@ export default function ZoneModel(props: ZoneDataProps) {
 
   // Common entity setup
   const mobColor = new THREE.Color(0xFF0000);
-  const pathStartColor = new THREE.Color(0x55AA55);
-  const pathDirectionColor = new THREE.Color(0xAAAA00);
-  const pathEndColor = new THREE.Color(0x5555AA);
-  const pathInterruptColor = new THREE.Color(0xFF5555);
+  const despawnColor = new THREE.Color(0x55AA55);
+  const outOfRangeColor = new THREE.Color(0xAAAA00);
   const clientColor = new THREE.Color(0x0000FF);
   const npcColor = new THREE.Color(0x00FF00);
   const widescanColor = new THREE.Color(0xE000DC);
   const geo = new THREE.CapsuleGeometry();
-  const ROT_TO_RADIANS = Math.PI * 2 / 256;
 
   // Setup animations for entities
   const mixers = createMemo(() => {
@@ -586,150 +586,6 @@ export default function ZoneModel(props: ZoneDataProps) {
     return discreteEntityMeshes;
   });
 
-  interface EntityPath {
-    line: THREE.Line,
-    pointMesh: THREE.InstancedMesh,
-    startTime: number,
-  }
-
-  const entityPathLines = createMemo(() => {
-    let pathLines: ByZone<{ [entityKey: string]: EntityPath[]; }> = {};
-
-    const lineMat = new THREE.LineBasicMaterial({
-      color: 0xCC0000,
-      linewidth: 1,
-      depthTest: true,
-    });
-    const pointMat = new THREE.MeshBasicMaterial();
-    const pointSize = 2
-    const pointGeo = new THREE.ConeGeometry(pointSize / 4, pointSize);
-    pointGeo.rotateZ(-Math.PI / 2);
-    pointGeo.translate(pointSize / 2, 0, 0);
-
-    const obj = new THREE.Object3D();
-
-    const copyAdjustedPos = (p: Position) => {
-      return new THREE.Vector3(p.x, p.y - 0.5, p.z);
-    }
-
-    const adjusted = adjustedEntityUpdates();
-
-    for (const zoneId in adjusted) {
-      const entityLines = (pathLines[zoneId] = pathLines[zoneId] || {});
-
-      for (const entityKey in adjusted[zoneId]) {
-        entityLines[entityKey] = [];
-
-        const updates = adjusted[zoneId][entityKey].updates;
-        const parts = parsePath(updates);
-
-        let currentParts: PathPart[] = [];
-
-        const endPath = () => {
-          if (currentParts.length <= 1) {
-            currentParts = []
-            return;
-          }
-
-          const lineGeo = new THREE.BufferGeometry().setFromPoints(currentParts.map(p => copyAdjustedPos(p.pos)));
-          const line = new THREE.Line(lineGeo, lineMat);
-
-          const pointMesh = new THREE.InstancedMesh(pointGeo, pointMat, currentParts.length * 2);
-
-          let lastRot = 0;
-          let pointColor: THREE.Color | undefined = undefined;
-
-          let pointCount = 0;
-          for (const part of currentParts) {
-            pointColor = undefined;
-
-            let rot = "rot" in part ? part.rot : lastRot;
-
-            if (part.kind == PathPartKind.Start && updatesSettings.show.pathKinds.start) {
-              pointColor = pathStartColor;
-            } else if (part.kind == PathPartKind.NewDirection && (updatesSettings.show.pathKinds.turn || updatesSettings.show.pathKinds.preturn)) {
-              pointColor = pathDirectionColor;
-            } else if (part.kind == PathPartKind.End && updatesSettings.show.pathKinds.end) {
-              pointColor = pathEndColor;
-            } else if (part.kind == PathPartKind.Interrupted && updatesSettings.show.pathKinds.interrupt) {
-              pointColor = pathInterruptColor;
-            }
-
-            if (pointColor) {
-              const pos = copyAdjustedPos(part.pos);
-              obj.position.set(pos.x, pos.y, pos.z);
-
-              // Draw non-direction points, and direction points when turns are enabled
-              if (part.kind != PathPartKind.NewDirection || updatesSettings.show.pathKinds.turn) {
-                obj.rotation.y = ROT_TO_RADIANS * rot;
-                obj.updateMatrix();
-
-                pointMesh.setMatrixAt(pointCount, obj.matrix);
-                pointMesh.setColorAt(pointCount, pointColor);
-                pointCount++;
-              }
-
-              // Draw an extra point for pre-turn points if enabled
-              if (part.kind == PathPartKind.NewDirection && updatesSettings.show.pathKinds.preturn) {
-                obj.rotation.y = ROT_TO_RADIANS * lastRot;
-                obj.updateMatrix();
-
-                pointMesh.setMatrixAt(pointCount, obj.matrix);
-                pointMesh.setColorAt(pointCount, pointColor);
-                pointCount++;
-              }
-            }
-
-            lastRot = rot;
-          }
-
-          pointMesh.count = pointCount;
-          if (pointMesh.instanceColor) {
-            pointMesh.instanceColor.needsUpdate = true;
-            pointMesh.instanceMatrix.needsUpdate = true;
-          }
-
-          entityLines[entityKey].push({
-            line,
-            startTime: currentParts[0]?.time,
-            pointMesh,
-          });
-
-          scene().add(line);
-          scene().add(pointMesh);
-
-          currentParts = []
-        }
-
-        for (const part of parts) {
-          if (part.kind == PathPartKind.Start) {
-            endPath();
-            currentParts = [part];
-          } else if (part.kind == PathPartKind.NewDirection) {
-            currentParts.push(part);
-          } else if (part.kind == PathPartKind.End || part.kind == PathPartKind.Interrupted) {
-            currentParts.push(part);
-            endPath();
-          }
-        }
-      }
-    }
-
-    onCleanup(() => {
-      for (const zoneId in pathLines) {
-        for (const entityKey in pathLines[zoneId]) {
-          for (const path of pathLines[zoneId][entityKey]) {
-            scene().remove(path.line);
-            scene().remove(path.pointMesh);
-          }
-          pathLines[zoneId][entityKey] = [];
-        }
-      }
-    });
-
-    return pathLines;
-  });
-
   // Show entities at different points in time
   createEffect(() => {
     if (!props.entityUpdates || !updatesSettings.show.discrete) {
@@ -838,9 +694,9 @@ export default function ZoneModel(props: ZoneDataProps) {
           } else if (update.kind == EntityUpdateKind.Widescan) {
             mesh.setColorAt(showCount, widescanColor);
           } else if (update.kind == EntityUpdateKind.OutOfRange) {
-            mesh.setColorAt(showCount, pathDirectionColor);
+            mesh.setColorAt(showCount, outOfRangeColor);
           } else if (update.kind == EntityUpdateKind.Despawn) {
-            mesh.setColorAt(showCount, pathStartColor);
+            mesh.setColorAt(showCount, despawnColor);
           }
           showCount++;
         }
@@ -853,28 +709,6 @@ export default function ZoneModel(props: ZoneDataProps) {
       }
       mesh.computeBoundingBox();
       mesh.computeBoundingSphere();
-    }
-  });
-
-  // Show/hide paths for rendered entities
-  createEffect(() => {
-    if (!props.entityUpdates) {
-      return;
-    }
-
-    const zoneId = getSelectedZone();
-    const allHidden = !updatesSettings.show.paths;
-
-    for (const entityKey in adjustedEntityUpdates()[zoneId]) {
-      const entityHidden = allHidden || entitySettings[entityKey]?.hidden
-
-      let pathInfo = entityPathLines()[zoneId][entityKey];
-
-      for (const path of pathInfo) {
-        const hidden = entityHidden || path.startTime < getDiscreteLowerTime() || path.startTime >= getDiscreteUpperTime();
-        path.line.visible = updatesSettings.show.pathKinds.lines && !hidden;
-        path.pointMesh.visible = !hidden;
-      }
     }
   });
 
@@ -922,6 +756,7 @@ export default function ZoneModel(props: ZoneDataProps) {
   }
 
   const [controls, setControls] = createSignal<MapControls>();
+  const [renderer, setRenderer] = createSignal<THREE.WebGLRenderer>()
 
   onMount(() => {
     window.addEventListener("resize", resizeCanvas);
@@ -1026,6 +861,7 @@ export default function ZoneModel(props: ZoneDataProps) {
     setControls(addMapControls(camera(), canvasElement));
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true, alpha: true });
+    setRenderer(renderer)
     const labelRenderer = new CSS2DRenderer({ element: labelRendererElement });
 
     renderer.setAnimationLoop(() => animate(renderer, labelRenderer));
@@ -1551,23 +1387,32 @@ export default function ZoneModel(props: ZoneDataProps) {
     return line;
   }));
 
+  const [getEntityPaths, setEntityPaths] = createSignal<EntityPathMap>()
+
   const focusVisible = () => {
     const zoneId = getSelectedZone();
     const meshes = discreteEntityMeshes()[zoneId];
-    const paths = entityPathLines()[zoneId];
+    const entityPaths = getEntityPaths() ?? {};
 
     fitCameraToContents(camera(), controls(), fn => {
-      for (const entityKey in meshes) {
-        if (!entitySettings[entityKey]?.hidden) {
-          fn(meshes[entityKey])
+      if (updatesSettings.show.discrete) {
+        for (const entityKey in meshes) {
+          if (!entitySettings[entityKey]?.hidden) {
+            fn(meshes[entityKey])
+          }
         }
       }
 
-      for (const entityKey in paths) {
-        if (!entitySettings[entityKey]?.hidden) {
-          for (const path of paths[entityKey]) {
-            fn(path.line)
-            fn(path.pointMesh)
+      if (updatesSettings.show.paths) {
+        for (const entityKey in entityPaths) {
+          if (!entitySettings[entityKey]?.hidden) {
+            const paths = entityPaths[entityKey]
+            if (paths.showLines) {
+              fn(paths.lines)
+            }
+            if (paths.showPoints) {
+              fn(paths.pointMesh)
+            }
           }
         }
       }
@@ -1699,6 +1544,21 @@ export default function ZoneModel(props: ZoneDataProps) {
         >
         </SelectionBox>
 
+        <Show when={updatesSettings.show.paths}>
+          <EntityPaths
+            scene={scene()}
+            renderer={renderer()}
+            adjustedEntityUpdates={adjustedEntityUpdates()[getSelectedZone()]}
+            pathKinds={updatesSettings.show.pathKinds}
+            entitySettings={entitySettings}
+            startTime={getDiscreteLowerTime()}
+            endTime={getDiscreteUpperTime()}
+            getEntityPaths={getEntityPaths}
+            setEntityPaths={setEntityPaths}
+          >
+          </EntityPaths>
+        </Show>
+
         {/* Node Manager */}
         <Show when={generalSettings.showNodeManager}>
           <PathNodes
@@ -1804,8 +1664,48 @@ export default function ZoneModel(props: ZoneDataProps) {
               });
             }}
             headerElements={[
-              <button onClick={focusVisible}>Focus visible</button>,
-              zoneSelector,
+              [
+                zoneSelector,
+                (_rows, filterFns, setFilterFns) => {
+                  const isEnabled = "static" in filterFns
+                  return <div class="flex m-auto gap-1 cursor-pointer">
+                    <label for="static-filter">Static only</label>
+                    <input
+                      id="static-filter"
+                      type="checkbox"
+                      checked={isEnabled}
+                      onInput={() => {
+                        if (isEnabled) {
+                          // Remove filter
+                          setFilterFns(produce(fs => {
+                            delete fs["static"];
+                          }));
+                        } else {
+                          // Add filter
+                          setFilterFns(produce(fs => {
+                            fs["static"] = (r: EntityRow): boolean => {
+                              const index = parseInt(r.index);
+                              return index < 0x400;
+                            };
+                          }));
+                        }
+                      }} />
+                  </div>
+                },
+              ],
+              [
+                <button onClick={focusVisible}>Focus visible</button>,
+                rows => (
+                  <button onClick={() => {
+                    batch(() => rows.forEach(v => setEntitySettings(v.entityKey, { hidden: false })))
+                  }}>Show filtered</button>
+                ),
+                rows => (
+                  <button onClick={() => {
+                    batch(() => rows.forEach(v => setEntitySettings(v.entityKey, { hidden: true })))
+                  }}>Hide filtered</button>
+                ),
+              ]
             ]}
           >
           </Table>
