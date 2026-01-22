@@ -70,7 +70,6 @@ export class PacketParser {
     let content = this.pendingContent;
 
     if (stringBytes) {
-      console.time("decoding")
       // If more bytes were given, append it to the current content string
       content += this.decoder.decode(stringBytes, { stream: true });
 
@@ -78,12 +77,10 @@ export class PacketParser {
       let lastPacketStart = content.lastIndexOf("\n[")
       this.pendingContent = content.slice(lastPacketStart);
       content = content.slice(0, lastPacketStart);
-      console.timeEnd("decoding")
     }
 
     const lines = content.split("\n");
 
-    console.time("parse-packets");
     let packetCount = 0;
 
     for (let i = 0; i < lines.length; i++) {
@@ -100,7 +97,6 @@ export class PacketParser {
     }
 
     console.log(`Extracted ${packetCount} packets`);
-    console.timeEnd("parse-packets");
   }
 
   private parsePacket(lines: string[]) {

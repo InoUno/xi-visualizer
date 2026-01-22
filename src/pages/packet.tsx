@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Match, Switch, batch } from "solid-js";
+import { createEffect, createSignal, For, Match, Switch, batch, startTransition } from "solid-js";
 
 import { createDropzone } from "@soorria/solid-dropzone";
 import { createStore } from "solid-js/store";
@@ -121,7 +121,15 @@ export default function PacketPage({ }: PacketPageProps) {
     }
 
     await Promise.allSettled(promises);
-    setZoneModels(zoneModels);
+    setStatus("Setting up rendering");
+
+    // Wait for the above status to render, before setting the zone models which starts the rendering.
+    // requestAnimationFrame is pre-paint, so need two of them in a row
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setZoneModels(zoneModels);
+      })
+    })
   });
 
   return (
