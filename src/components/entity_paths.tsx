@@ -106,7 +106,7 @@ export default function EntityPaths(ps: EntityPaths) {
 
         const indices = lines.addLineSegments(currentParts.map(p => copyAdjustedPos(p.pos)))
         // Note the time and id correlation, so the line draw range can be easily sliced based on time later
-        currentParts.slice(0, currentParts.length - 1).forEach((p, i) => {
+        currentParts.slice(1).forEach((p, i) => {
           const idx = indices[i]
           lines.userData.times.push(p.time)
           lines.userData.indices.push(idx)
