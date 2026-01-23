@@ -1523,9 +1523,9 @@ export default function ZoneModel(props: ZoneDataProps) {
   }
 
   return (
-    <div classList={{ "zone_model_layout": !!props.entityUpdates }}>
+    <div classList={{ "zone-model-layout": !!props.entityUpdates }}>
 
-      <div class="relative" style={{ height: "70vh" }}>
+      <div class="relative zone-viewer">
         <canvas tabIndex={0} class="block w-full h-full outline-none" ref={canvasElement}>
         </canvas>
 
@@ -1637,7 +1637,7 @@ export default function ZoneModel(props: ZoneDataProps) {
 
       <Show when={props.entityUpdates}>
         {/* Table of entities in packets */}
-        <div style={{ "max-height": "70vh", "min-width": "70ch" }}>
+        <div class="entity-list">
           <Table
             inputRows={currentEntityUpdates().entityRows ?? []}
             columns={[
@@ -1719,7 +1719,7 @@ export default function ZoneModel(props: ZoneDataProps) {
           fallback={zoneSelector}
           when={getSelectedZone() in summarizedEntityUpdates()}
         >
-          <div class="flex flex-col gap-3 my-2 col-span-2">
+          <div class="flex flex-col gap-3 my-2 controls">
             <div class="flex flex-row">
               <div class="m-auto h-full px-1 font-bold" style={{ "min-width": "6rem" }}>
                 Discrete:

@@ -1,9 +1,39 @@
 
-.zone_model_layout {
+.zone-model-layout {
     display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-rows: 1fr auto;
+    grid-template-areas:
+        "view"
+        "controls"
+        "table";
 
     height: 100%;
     width: 100%;
+}
+
+.zone-viewer {
+    grid-area: view;
+    height: 70vh;
+}
+
+.entity-list {
+    grid-area: table;
+    max-height: 50vh;
+}
+
+.controls {
+    grid-area: controls;
+}
+
+@media (min-width: 2000px) {
+    .zone-model-layout {
+        grid-template-areas:
+            "view table"
+            "controls controls";
+        grid-template-columns: 1fr auto;
+    }
+
+    .entity-list {
+        max-height: 70vh;
+        min-width: 70ch;
+    }
 }
