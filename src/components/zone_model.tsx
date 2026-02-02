@@ -1651,7 +1651,7 @@ export default function ZoneModel(props: ZoneDataProps) {
             defaultSortAsc={true}
             additionalColumns={[
               {
-                name: "Visible",
+                name: "✓",
                 content: v => (
                   <input
                     type="checkbox"
