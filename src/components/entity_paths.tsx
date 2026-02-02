@@ -104,7 +104,7 @@ export default function EntityPaths(ps: EntityPaths) {
           return
         }
 
-        const indices = lines.addLineSegments(currentParts.map(p => copyAdjustedPos(p.pos)))
+        const indices = lines.addLineSegments(currentParts.map(p => copyAdjustedPos(p.pos)), false)
         // Note the time and id correlation, so the line draw range can be easily sliced based on time later
         currentParts.slice(1).forEach((p, i) => {
           const idx = indices[i]
@@ -202,6 +202,7 @@ export default function EntityPaths(ps: EntityPaths) {
       pointMesh.layers.enableAll()
       pointMesh.computeBVH()
       pointMesh.computeBoundingSphere()
+      lines.updateGraphics();
 
       paths[entityKey] = {
         lines,

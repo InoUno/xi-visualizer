@@ -103,7 +103,7 @@ export class DynamicLineSegments extends THREE.LineSegments {
         this.geometry.computeBoundingSphere();
     }
 
-    private updateGraphics() {
+    updateGraphics() {
         this.geometry.attributes.position.needsUpdate = true;
         this.geometry.setDrawRange(this.drawStart ?? 0, (this.drawEnd ?? this.count) - (this.drawStart ?? 0));
         this.geometry.computeBoundingSphere()
