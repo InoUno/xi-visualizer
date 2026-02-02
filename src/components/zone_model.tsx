@@ -1425,7 +1425,7 @@ export default function ZoneModel(props: ZoneDataProps) {
   }));
 
   const toggleButton = (text: string, setter: (b: boolean) => any, getter: () => boolean) => {
-    return <label class="inline-flex items-center cursor-pointer select-none"
+    return <label class="inline-flex align-middle items-center cursor-pointer select-none"
       onClick={(e) => {
         setter(!getter())
         e.preventDefault();
@@ -1721,14 +1721,6 @@ export default function ZoneModel(props: ZoneDataProps) {
         >
           <div class="flex flex-col gap-3 my-2 controls">
             <div class="flex flex-row">
-              <div class="m-auto h-full px-1 font-bold" style={{ "min-width": "6rem" }}>
-                Discrete:
-              </div>
-              <div class="px-1 m-auto h-full">
-                <button style={{ "min-width": "5rem" }} onClick={() => updatesSettings.show.discrete = !updatesSettings.show.discrete}>
-                  {updatesSettings.show.discrete ? "Hide" : "Show"}
-                </button>
-              </div>
               <div class="flex-grow">
                 <RangeInput
                   min={currentEntityUpdates().firstTime}
@@ -1740,74 +1732,90 @@ export default function ZoneModel(props: ZoneDataProps) {
                     setNewDiscrete([lower, upper]);
                   }}
                   nudge={true}
-                  disabled={!updatesSettings.show.discrete}
+                  disabled={!(updatesSettings.show.discrete || updatesSettings.show.paths)}
                 >
                 </RangeInput>
               </div>
             </div>
 
-            <div class="flex flex-row">
-              <div class="m-auto h-full px-1 font-bold" style={{ "min-width": "6rem" }}>
-                Animated:
+            <div class="p-2 mb-1 bg-slate-800 rounded">
+              <div class="flex flex-row">
+                <div class="my-auto mr-5">
+                  {toggleButton("Discrete", (v) => { updatesSettings.show.discrete = v; }, () => updatesSettings.show.discrete)}
+                </div>
               </div>
-              <div class="m-auto h-full px-1">
-                <button style={{ "min-width": "5rem" }} onClick={() => updatesSettings.show.animated = !updatesSettings.show.animated}>
-                  {updatesSettings.show.animated ? "Hide" : "Show"}
-                </button>
+              <Show when={updatesSettings.show.discrete}>
+                <div class="flex gap-5 mt-2">
+                  <div>Discrete toggles: </div>
+                  {toggleButton("Widescan", (v) => { updatesSettings.show.widescan = v; }, () => updatesSettings.show.widescan)}
+                  {toggleButton("Rendered", (v) => { updatesSettings.show.rendered = v; }, () => updatesSettings.show.rendered)}
+                  {toggleButton("Only latest", (v) => { updatesSettings.show.lastOnly = v; }, () => updatesSettings.show.lastOnly)}
+                </div>
+              </Show>
+            </div>
+
+
+            <div class="p-2 mb-1 bg-slate-800 rounded">
+              <div class="my-auto mr-5">
+                {toggleButton("Rendered paths", (v) => { updatesSettings.show.paths = v; }, () => updatesSettings.show.paths)}
               </div>
-              <div class="m-auto h-full px-1">
-                <button style={{ "min-width": "5rem" }} onClick={() => setIsPlaying(!isPlaying())}>
-                  {isPlaying() ? "Pause" : "Play"}
-                </button>
-              </div>
-              <div class="m-auto relative">
-                <input
-                  type="number"
-                  class="text-right pr-3"
-                  min={1}
-                  max={1000}
-                  style={{ width: "4.5rem" }}
-                  value={getTimeScale()}
-                  onInput={e => setTimeScale(parseInt(e.target.value) || 1)}
-                >
-                </input>
-                <span style={{ position: "absolute", right: "0.8rem", top: "0.5rem", margin: "auto" }}>
-                  ×
-                </span>
-              </div>
-              <div class="m-auto flex-grow">
-                <input
-                  type="range"
-                  class="w-full"
-                  min={currentEntityUpdates().firstTime}
-                  max={currentEntityUpdates().lastTime}
-                  value={getPlayTime() * 1000 + currentEntityUpdates().firstTime}
-                  onMouseDown={() => setIsSeeking(true)}
-                  onMouseUp={() => setIsSeeking(false)}
-                  onInput={e => setPlayTime((parseInt(e.target.value) - currentEntityUpdates().firstTime) / 1000)}
-                >
-                </input>
+              <Show when={updatesSettings.show.paths}>
+                <div class="flex gap-5 mt-2">
+                  <div>Path parts:</div>
+                  {toggleButton("Start", (v) => { updatesSettings.show.pathKinds.start = v; }, () => updatesSettings.show.pathKinds.start)}
+                  {toggleButton("Pre-turn", (v) => { updatesSettings.show.pathKinds.preturn = v; }, () => updatesSettings.show.pathKinds.preturn)}
+                  {toggleButton("Turn", (v) => { updatesSettings.show.pathKinds.turn = v; }, () => updatesSettings.show.pathKinds.turn)}
+                  {toggleButton("End", (v) => { updatesSettings.show.pathKinds.end = v; }, () => updatesSettings.show.pathKinds.end)}
+                  {toggleButton("Interrupt", (v) => { updatesSettings.show.pathKinds.interrupt = v; }, () => updatesSettings.show.pathKinds.interrupt)}
+                  {toggleButton("Lines", (v) => { updatesSettings.show.pathKinds.lines = v; }, () => updatesSettings.show.pathKinds.lines)}
+                </div>
+              </Show>
+            </div>
+
+            <div class="p-2 mb-1 bg-slate-800 rounded">
+              <div class="flex flex-row" style={{ height: "45px" }}>
+                <div class="mr-5 my-auto">
+                  {toggleButton("Animated", (v) => { updatesSettings.show.animated = v; }, () => updatesSettings.show.animated)}
+                </div>
+
+                <Show when={updatesSettings.show.animated}>
+                  <div class="m-auto h-full px-1">
+                    <button style={{ "min-width": "5rem" }} onClick={() => setIsPlaying(!isPlaying())}>
+                      {isPlaying() ? "Pause" : "Play"}
+                    </button>
+                  </div>
+                  <div class="m-auto relative">
+                    <input
+                      type="number"
+                      class="text-right pr-3"
+                      min={1}
+                      max={1000}
+                      style={{ width: "4.5rem" }}
+                      value={getTimeScale()}
+                      onInput={e => setTimeScale(parseInt(e.target.value) || 1)}
+                    >
+                    </input>
+                    <span style={{ position: "absolute", right: "0.8rem", top: "0.5rem", margin: "auto" }}>
+                      ×
+                    </span>
+                  </div>
+                  <div class="m-auto flex-grow">
+                    <input
+                      type="range"
+                      class="w-full"
+                      min={currentEntityUpdates().firstTime}
+                      max={currentEntityUpdates().lastTime}
+                      value={getPlayTime() * 1000 + currentEntityUpdates().firstTime}
+                      onMouseDown={() => setIsSeeking(true)}
+                      onMouseUp={() => setIsSeeking(false)}
+                      onInput={e => setPlayTime((parseInt(e.target.value) - currentEntityUpdates().firstTime) / 1000)}
+                    >
+                    </input>
+                  </div>
+                </Show>
               </div>
             </div>
 
-            <div class="flex gap-5">
-              {toggleButton("Widescan", (v) => { updatesSettings.show.widescan = v; }, () => updatesSettings.show.widescan)}
-              {toggleButton("Rendered", (v) => { updatesSettings.show.rendered = v; }, () => updatesSettings.show.rendered)}
-              {toggleButton("Rendered paths", (v) => { updatesSettings.show.paths = v; }, () => updatesSettings.show.paths)}
-              {toggleButton("Only latest", (v) => { updatesSettings.show.lastOnly = v; }, () => updatesSettings.show.lastOnly)}
-            </div>
-
-            <Show when={updatesSettings.show.paths}>
-              <div class="flex gap-5">
-                <div>Path parts:</div>
-                {toggleButton("Start", (v) => { updatesSettings.show.pathKinds.start = v; }, () => updatesSettings.show.pathKinds.start)}
-                {toggleButton("Pre-turn", (v) => { updatesSettings.show.pathKinds.preturn = v; }, () => updatesSettings.show.pathKinds.preturn)}
-                {toggleButton("Turn", (v) => { updatesSettings.show.pathKinds.turn = v; }, () => updatesSettings.show.pathKinds.turn)}
-                {toggleButton("End", (v) => { updatesSettings.show.pathKinds.end = v; }, () => updatesSettings.show.pathKinds.end)}
-                {toggleButton("Interrupt", (v) => { updatesSettings.show.pathKinds.interrupt = v; }, () => updatesSettings.show.pathKinds.interrupt)}
-                {toggleButton("Lines", (v) => { updatesSettings.show.pathKinds.lines = v; }, () => updatesSettings.show.pathKinds.lines)}
-              </div>
-            </Show>
           </div>
         </Show>
       </Show>

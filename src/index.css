@@ -17,6 +17,7 @@ input:focus {
 
   body {
     height: 100%;
+    overflow-y: scroll;
     @apply bg-slate-900 text-slate-200 p-2;
   }
 
