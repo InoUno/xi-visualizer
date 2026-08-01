@@ -761,55 +761,57 @@ function getRayGridCells(start: THREE.Vector3, end: THREE.Vector3, gridWidth: nu
     const deltaZ = Math.abs(dz) < 1e-10 ? Infinity : Math.abs(4 / dz);
 
     // Distance to next grid line
-    let nextX, nextZ;
+    let nextX = Infinity;
+    let nextZ = Infinity;
 
-    if (dx > 0) {
-        // Distance to right edge of current cell
-        const rightEdge = (col + 1) * 4 - (gridWidth * 2);
-        nextX = (rightEdge - start.x) / dx;
-    } else if (dx < 0) {
-        // Distance to left edge of current cell
-        const leftEdge = col * 4 - (gridWidth * 2);
-        nextX = (leftEdge - start.x) / dx;
-    } else {
-        nextX = Infinity;
+    if (col != endCol) {
+        if (dx > 0) {
+            // Distance to right edge of current cell
+            const rightEdge = (col + 1) * 4 - (gridWidth * 2);
+            nextX = (rightEdge - start.x) / dx;
+        } else if (dx < 0) {
+            // Distance to left edge of current cell
+            const leftEdge = col * 4 - (gridWidth * 2);
+            nextX = (leftEdge - start.x) / dx;
+        }
     }
 
-    if (dz > 0) {
-        // Distance to bottom edge of current cell
-        const bottomEdge = (row + 1) * 4 - (gridHeight * 2);
-        nextZ = (bottomEdge - start.z) / dz;
-    } else if (dz < 0) {
-        // Distance to top edge of current cell
-        const topEdge = row * 4 - (gridHeight * 2);
-        nextZ = (topEdge - start.z) / dz;
-    } else {
-        nextZ = Infinity;
+    if (row != endRow) {
+        if (dz > 0) {
+            // Distance to bottom edge of current cell
+            const bottomEdge = (row + 1) * 4 - (gridHeight * 2);
+            nextZ = (bottomEdge - start.z) / dz;
+        } else if (dz < 0) {
+            // Distance to top edge of current cell
+            const topEdge = row * 4 - (gridHeight * 2);
+            nextZ = (topEdge - start.z) / dz;
+        }
     }
 
     // Add starting cell
     cells.push({ col, row });
 
-    // Traverse until we reach the end cell or ray length
-    const rayLength = Math.sqrt(dx * dx + dz * dz);
-    let currentDistance = 0;
-
-    while ((col !== endCol || row !== endRow) && currentDistance < rayLength) {
+    while (col !== endCol || row !== endRow) {
         // Move to next grid line (whichever is closer)
         if (nextX < nextZ) {
-            currentDistance = nextX;
             nextX += deltaX;
             col += stepCol;
+
+            // If we're at the end grid column, then ensure we do not step further that way
+            if (col == endCol) {
+                nextX = Infinity;
+            }
         } else {
-            currentDistance = nextZ;
             nextZ += deltaZ;
             row += stepRow;
+
+            // If we're at the end grid row, then ensure we do not step further that way
+            if (row == endRow) {
+                nextZ = Infinity;
+            }
         }
 
-        // Only add cell if we haven't exceeded the ray length
-        if (currentDistance <= rayLength) {
-            cells.push({ col, row });
-        }
+        cells.push({ col, row });
 
         // Safety check to prevent infinite loops
         if (cells.length >= 1000) {
